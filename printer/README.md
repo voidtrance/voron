@@ -5,10 +5,14 @@ List of some hardware and software references for printer configuration.
 
 - Board Manual: https://github.com/bigtreetech/BIGTREETECH-OCTOPUS-V1.0/blob/master/BIGTREETECH_Octopus_EN_updated_0719.pdf
 - Board Pinout: https://github.com/bigtreetech/BIGTREETECH-OCTOPUS-V1.0/blob/master/Hardware/BIGTREETECH%20Octopus%20-%20PIN.pdf
+- Voron Wiring Guide: https://docs.vorondesign.com/build/electrical/v2_octopus_wiring.html
+
+![BTT Octopus Wiring](https://docs.vorondesign.com/build/electrical/images/v2_octopus_wiring.png)
 
 ## Voron Documentation
 - Website: https://docs.vorondesign.com/
 - GitHub: https://github.com/VoronDesign/Voron-Documentation
+- V2.4 Assembly Guide: https://github.com/VoronDesign/Voron-2/raw/Voron2.4/Manual/Assembly_Manual_2.4r2.pdf
 
 ## Klipper
 - Junja2 Template Documentation: https://jinja.palletsprojects.com/en/2.10.x/templates/#
