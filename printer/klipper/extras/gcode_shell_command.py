@@ -19,6 +19,8 @@ class ShellCommand:
         self.command = shlex.split(cmd)
         self.timeout = config.getfloat('timeout', 2., above=0.)
         self.verbose = config.getboolean('verbose', True)
+        self.on_success = config.get('success', None)
+        self.on_failure = config.get('failure', None)
         self.proc_fd = None
         self.partial_output = ""
         self.gcode.register_mux_command(
@@ -72,17 +74,23 @@ class ShellCommand:
                 break
         if not complete:
             proc.terminate()
+        status = proc.wait()
         if self.verbose:
             if self.partial_output:
                 self.gcode.respond_info(self.partial_output)
                 self.partial_output = ""
+            reactor.unregister_fd(hdl)
+            self.proc_fd = None
+        if status == 0 and self.on_success:
+            self.gcode.run_script_from_command(self.on_success)
+        elif self.on_failure:
+            self.gcode.run_script_from_command(self.on_failure)
+        if self.verbose:
             if complete:
                 msg = "Command {%s} finished\n" % (self.name)
             else:
                 msg = "Command {%s} timed out" % (self.name)
             self.gcode.respond_info(msg)
-            reactor.unregister_fd(hdl)
-            self.proc_fd = None
 
 
 def load_config_prefix(config):
