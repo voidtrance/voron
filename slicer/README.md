@@ -24,3 +24,31 @@ Location: %USER%\AppData\Roaming\SuperSlicer\print
 
 ### Printer Profiles
 Location: %USER%\AppData\Roaming\SuperSlicer\printer
+
+## Filament IDs
+Each filament type/brand has been marked with it's own unique ID. Furthermore, the
+IDs have the following format:
+
+```
+TTTBBBBUU
+```
+
+* T - Filament type
+* B - Brand identifier
+* U - Sub-branch identifier
+
+The following type codes are defined:
+
+| Code | Type |
+| :---: | :--- |
+| 100 | PLA |
+| 200 | ABS |
+| 300 | PETG |
+
+### Filament ID Definitions
+
+| Code | Type | Description
+| :--- | :---: | :--- |
+| 100000100 | PLA | eSun PLA+ |
+| 100000200 | PLA | FilamentFusion HTPLA+ |
+| 200000100 | ABS | Sparta ABS+ |
