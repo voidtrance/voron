@@ -1,6 +1,6 @@
 # Installing Klipper Extensions
 
-Klipper extensions are placed in __~/klipper/klippy/extras__.
+Klipper extensions are placed in _~/klipper/klippy/extras_.
 
 # Custom Extension Information
 The extensions listed below are extensions that I've modified or enhanced.
@@ -28,4 +28,35 @@ command:
 #   does not complete successfully. If this option is not
 #   present nothing will be executed.
 ```
+### Example
+```
+[gcode_shell_command my_command]
+command: echo my_command executing
+success:
+    M117 my_command executed successfully.
+failure:
+    M117 my_command failed.
 
+[gcode_macro exec_my_command]
+gcode:
+    RUN_SHELL_COMMAND CMD=my_command
+```
+
+#### __WARNING__: Infinite Loops
+
+Since the G-Code executed on success/failure can be arbitrary, on top of
+all the other issues resulting from using external commands, it is now possible to
+create an infinite loop that will prevent the printer from continuing.
+
+For example, the following will cause an infinite loop:
+
+```
+[gcode_shell_command my_command]
+command: echo my_command executing
+success:
+    exec_my_command
+
+[gcode_macro exec_my_command]
+gcode:
+    RUN_SHELL_COMMAND CMD=my_command
+```
