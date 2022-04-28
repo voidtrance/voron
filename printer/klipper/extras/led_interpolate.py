@@ -17,7 +17,6 @@ class LedInterpolate:
                                     desc=self.cmd_LED_INTERPOLATE_help)
 
     def compute_color(self, start, end, factor):
-        #return round(start * (1.0 - factor)  + end * factor, 5)
         return round(((end - start) * factor) + start, 5)
 
     cmd_LED_INTERPOLATE_help = "Smootly transition LEDs between two colors"
@@ -27,7 +26,6 @@ class LedInterpolate:
         led_count = self.led_helper.get_led_count()
         for index in range(led_count):
             current_state = [round(c * 255) for c in self.led_helper.led_state[index]]
-            logging.info("  LED[%d]: state: %s" % (index, current_state))
 
             if current_state == self.interpolation_params[0]:
                 all_done = True
@@ -40,7 +38,6 @@ class LedInterpolate:
             blue = self.compute_color(colors[2], target_colors[2], factor)
             white = self.compute_color(colors[3], target_colors[3], factor)
 
-            logging.info("     LED[%d]: new %s" % (index, [red, green, blue, white]))
             self.led_helper.set_color(index, (round(red / 255, 2), round(green / 255, 2),
                                               round(blue / 255, 2), round(white / 255, 2)))
             self.current_colors[index] = [red, green, blue, white]
@@ -48,7 +45,6 @@ class LedInterpolate:
         self.led_helper.check_transmit(None)
         if all_done:
             reactor = self.printer.get_reactor()
-            reactor.unregister_timer(self.timer)
             return reactor.NEVER
         return eventtime + INTERPOLATE_STEP_TIME
 
@@ -58,21 +54,16 @@ class LedInterpolate:
         target_green = round(params.get_float("GREEN", minval=0.0, maxval=1.0) * 255)
         target_blue = round(params.get_float("BLUE", minval=0.0, maxval=1.0) * 255)
         target_white = round(params.get_float("WHITE", 0.0, minval=0.0, maxval=1.0) * 255)
-        factor = params.get_float("FACTOR", 0.3, minval=0.1, maxval=1.0)
-
-        logging.info("LED[%s]: Target: R%f G%f B%f W%f" % \
-            (target_name, target_red, target_green, target_blue, target_white))
+        factor = params.get_float("FACTOR", 0.3, minval=0.01, maxval=1.0)
 
         self.led_helper = self.led.led_helpers[target_name]
         if not self.led_helper:
             logging.exception("Target LED does not exists")
             return
 
-        logging.info("LED[%s]: %s" % (target_name, dir(self.led_helper)))
         self.interpolation_params = ([target_red, target_green, target_blue, target_white],
                                      factor)
         self.current_colors = [[round(c * 255, 2) for c in led] for led in self.led_helper.led_state]
-        logging.info("LED[%s]: current %s" % (target_name, self.current_colors))
         reactor = self.printer.get_reactor()
         self.timer = reactor.register_timer(self._interpolate_leds, reactor.NOW)
 
