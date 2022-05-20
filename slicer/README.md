@@ -35,7 +35,14 @@ files for tuning the printer, print surface, or filament:
     <tr>
       <td valign="top">PA_Calibrate.gcode</td>
       <td>A pre-generated GCode file for tuning Pressure Advance for a filament.
-          Before use, the parameters to the PRINT_START macro have to be adjusted.</td>
+          Before use, the folloeing parameters need to be set:
+          <ul>
+            <li>BED - Bed temperature for the filament being tuned.</li>
+            <li>EXTRUDER - Extruder temperature for the filament being tuned.</li>
+            <li>CHAMBER - Chamber temperature for the filament being tuned.</li>
+            <li>FILAMENT_ID - Filament ID of the filament being tuned. See "Filament IDs" below.</li>
+          </ul>
+       </td>
     </tr>
     <tr>
       <td valign="top">FirstLayer.3mf</td>
