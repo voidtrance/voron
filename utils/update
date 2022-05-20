@@ -112,6 +112,7 @@ def update_config(conn, opts, tempdir):
     for filename in local_files:
         diff = compare_files(tempdir / filename, opts.path / filename)
         if diff:
+            answer = "y"
             if opts.ask:
                 while True:
                     answer = input(f"Upload {filename}? [y/n/d] ").lower()
@@ -119,20 +120,23 @@ def update_config(conn, opts, tempdir):
                         show_diff(diff)
                     if answer in ("y", "n"):
                         break
-                if answer == "y":
-                    conn.put(os.path.join(opts.path, filename),
-                             os.path.join(REMOTE_CONF_PATH, filename))
+            if answer == "y":
+                print(f"Updating {filename}...")
+                conn.put(os.path.join(opts.path, filename),
+                         os.path.join(REMOTE_CONF_PATH, filename))
         if filename in remote_files:
             remote_files.remove(filename)
     for filename in remote_files:
+        answer = "y"
         if opts.ask:
             while True:
                 answer = input(
                     f"File {filename} on printer but not local. Remove? [y/n] ").lower()
                 if answer in ("y", "n"):
                     break
-            if answer == "y":
-                conn.remove(os.path.join(REMOTE_CONF_PATH, filename))
+        if answer == "y":
+            print(f"Removing {filename}...")
+            conn.remove(os.path.join(REMOTE_CONF_PATH, filename))
     return 0
 
 
