@@ -1,0 +1,212 @@
+#!/usr/bin/python
+##
+# Simple script to handle printer configration updates.
+##
+import argparse
+import getpass
+import pathlib
+import tempfile
+import difflib
+import os
+import sys
+
+try:
+    import paramiko
+except ImportError:
+    print("This tool requires python3-paramiko.", file=sys.stderr)
+    sys.exit(1)
+
+REMOTE_CONF_PATH = "klipper_config"
+LOCAL_CONF_PATH = "../printer/config"
+
+
+class GColor:  # Gnome supported
+    END = "\x1b[0m"
+    # If Foreground is False that means color effect on Background
+
+    @staticmethod
+    def RGB(R, G, B, Foreground=True):  # R: 0-255  ,  G: 0-255  ,  B: 0-255
+        # Effect on foreground or background
+        FB_G = 38 + (not Foreground and 10 or 0)
+        return "\x1b[" + str(FB_G) + ";2;" + str(R) + ";" + str(G) + ";" + str(B) + "m"
+
+    @staticmethod
+    def HEX(code, Foreground=True):
+        if len(code) != 7 or code[0] != '#':
+            raise TypeError("Invaid HEX color code.")
+        R, G, B = [code[i:i + 2] for i in range(1, len(code), 2)]
+        return GColor.RGB(int(R, 16), int(G, 16), int(B, 16), Foreground)
+
+
+TITLE_COLOR = GColor.RGB(255, 255, 0)
+FILENAME_COLOR = GColor.RGB(0, 255, 255)
+REMOVE_COLOR = GColor.RGB(255, 0, 0)
+ADD_COLOR = GColor.RGB(0, 255, 0)
+
+
+def compare_files(file1, file2):
+    content1, content2 = [], []
+    if file1.exists() and os.access(file1, os.R_OK):
+        with (open(file1, 'r')) as fd:
+            content1 = fd.readlines()
+    if file2.exists() and os.access(file2, os.R_OK):
+        with open(file2, 'r') as fd:
+            content2 = fd.readlines()
+    if content1 == content2:
+        return None
+    return difflib.unified_diff(content1, content2, str(file1), str(file2))
+
+
+def download_config(conn, path):
+    filenames = conn.listdir(REMOTE_CONF_PATH)
+    for filename in filenames:
+        if not filename.endswith(".bkp"):
+            conn.get(os.path.join(REMOTE_CONF_PATH, filename),
+                     os.path.join(path, filename))
+
+
+def pull_config(conn, opts, tempdir):
+    download_config(conn, opts.path)
+    return 0
+
+
+def push_config(conn, opts, tempdir):
+    for filename in os.listdir(opts.path):
+        conn.put(os.path.join(opts.path, filename),
+                 os.path.join(REMOTE_CONF_PATH, filename))
+    return 0
+
+
+def show_diff(diff):
+    for line in diff:
+        if line[-1] != "\n":
+            line += "\n"
+        if line.startswith(("+++", "---")):
+            print(f"   {FILENAME_COLOR}{line}{GColor.END}", end="")
+        elif line.startswith('+'):
+            print(f"   {ADD_COLOR}{line}{GColor.END}", end="")
+        elif line.startswith('-'):
+            print(f"   {REMOVE_COLOR}{line}{GColor.END}", end="")
+        else:
+            print(f"   {line}", end="")
+
+
+def compare_config(conn, opts, tempdir):
+    download_config(conn, tempdir)
+    opts.path = pathlib.PosixPath(opts.path)
+    file_set = set([x.name for x in opts.path.iterdir()]) | \
+        set([x.name for x in tempdir.iterdir()])
+    for filename in file_set:
+        result = compare_files(tempdir / filename, opts.path / filename)
+        if result:
+            print(f"{TITLE_COLOR}{filename}{GColor.END} differs:")
+            show_diff(result)
+    return 0
+
+
+def update_config(conn, opts, tempdir):
+    opts.path = pathlib.PosixPath(opts.path)
+    download_config(conn, tempdir)
+    local_files = [x.name for x in opts.path.iterdir()]
+    remote_files = [x.name for x in tempdir.iterdir()]
+    for filename in local_files:
+        diff = compare_files(tempdir / filename, opts.path / filename)
+        if diff:
+            if opts.ask:
+                while True:
+                    answer = input(f"Upload {filename}? [y/n/d] ").lower()
+                    if answer == "d":
+                        show_diff(diff)
+                    if answer in ("y", "n"):
+                        break
+                if answer == "y":
+                    conn.put(os.path.join(opts.path, filename),
+                             os.path.join(REMOTE_CONF_PATH, filename))
+        if filename in remote_files:
+            remote_files.remove(filename)
+    for filename in remote_files:
+        if opts.ask:
+            while True:
+                answer = input(
+                    f"File {filename} on printer but not local. Remove? [y/n] ").lower()
+                if answer in ("y", "n"):
+                    break
+            if answer == "y":
+                conn.remove(os.path.join(REMOTE_CONF_PATH, filename))
+    return 0
+
+
+def clean_temp_dir(path):
+    for file in path.iterdir():
+        file.unlink()
+    path.rmdir()
+
+
+def main():
+    parser = argparse.ArgumentParser(sys.argv[0],
+                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    subparser = parser.add_subparsers(title="Operation Modes")
+    pull_parser = subparser.add_parser("pull",
+                                       formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+                                       help="Download configuration files.")
+    pull_parser.add_argument("--path", type=str,
+                             help="Directory where configuration files will be stored.")
+    pull_parser.add_argument("printer", type=str,
+                             help="Printer name/address.")
+    pull_parser.set_defaults(handler=pull_config)
+    push_parser = subparser.add_parser("push",
+                                       formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+                                       help="Upload local configuration to printer.")
+    push_parser.add_argument("--path", type=str, default=LOCAL_CONF_PATH,
+                             help="Configuration file source directory")
+    push_parser.add_argument("printer", type=str,
+                             help="Printer name/address.")
+    push_parser.set_defaults(handler=push_config)
+    compare_parser = subparser.add_parser("compare",
+                                          formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+                                          help="Compare configuration files.")
+    compare_parser.add_argument("--path", type=str, default=LOCAL_CONF_PATH,
+                                help="Configuration file source directory")
+    compare_parser.add_argument("printer", type=str,
+                                help="Printer name/address.")
+    compare_parser.set_defaults(handler=compare_config)
+    update_parser = subparser.add_parser("update",
+                                         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+                                         help="Update printer configuration.")
+    update_parser.add_argument("--path", type=str, default=LOCAL_CONF_PATH,
+                               help="Configuration files source directory.")
+    update_parser.add_argument("--ask", action="store_true",
+                               help="Ask for confirmation before update file.")
+    update_parser.add_argument("printer", type=str,
+                               help="Printer name/address.")
+    update_parser.set_defaults(handler=update_config)
+    opts = parser.parse_args(sys.argv[1:])
+
+    tempdir = pathlib.PosixPath(tempfile.mkdtemp(prefix="printer_conf.",
+                                                 dir="/tmp"))
+    tempdir.mkdir(parents=True, exist_ok=True)
+    printer_pass = getpass.getpass("Printer access password: ")
+
+    # Create the SSH client
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    try:
+        client.connect(opts.printer, username="pi",
+                       password=printer_pass, allow_agent=False)
+    except Exception as err:
+        print(f"SSH Connect: {err}")
+        sys.exit(1)
+
+    # Open a SFTP connection. This will be the connection that will
+    # be used for all transfers
+    sftp = client.open_sftp()
+
+    status = opts.handler(sftp, opts, tempdir)
+
+    client.close()
+    clean_temp_dir(tempdir)
+    return status
+
+
+if __name__ == "__main__":
+    sys.exit(main())
