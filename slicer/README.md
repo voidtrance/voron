@@ -25,6 +25,37 @@ Location: %USER%\AppData\Roaming\SuperSlicer\print
 ### Printer Profiles
 Location: %USER%\AppData\Roaming\SuperSlicer\printer
 
+## Printer/Filament Tuning
+The [/tuning](/tuning) directory contains some SuperSlicer project files and GCode
+files for tuning the printer, print surface, or filament:
+
+<table>
+  <tbody>
+    <tr><th>File</th><th>Description</th></tr>
+    <tr>
+      <td valign="top">PA_Calibrate.gcode</td>
+      <td>A pre-generated GCode file for tuning Pressure Advance for a filament.
+          Before use, the parameters to the PRINT_START macro have to be adjusted.</td>
+    </tr>
+    <tr>
+      <td valign="top">FirstLayer.3mf</td>
+      <td>A SuperSlicer project for tuning the first layer of a new print surface.</td>
+    </tr>
+    <tr>
+      <td valign="top">ExtrusionMultiplierTest.3mf</td>
+      <td>A SuperSliver project for tuning extrusion multiplier for a filament.
+          Open the project, set the filament and ensure that:
+          <ul>
+            <li>The "Extrusion Multiplier" setting is set to 1.</li>
+            <li>"Default Fan Speed" is set to 100.</li>
+            <li>"Full fan speed as layer" is set to 1.</li>
+            <li>"Layer time goal" is set to 0.</li>
+          </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+
 ## Filament IDs
 Each filament type/brand has been marked with it's own unique ID. Furthermore, the
 IDs have the following format:
