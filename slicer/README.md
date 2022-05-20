@@ -73,7 +73,25 @@ TTTBBBBUU
 
 * T - Filament type
 * B - Brand identifier
-* U - Sub-branch identifier
+* U - Sub-brand identifier
+
+Filament IDs are set in "Custom Variables" under the "Notes" section of the Filament
+Settings in SuperSlicer.
+
+This allows the printer to be setup with various values based on the filament being
+used. The printer custom GCode (PRINT_START, PRINT_END, etc.) are setup to pass the
+filament ID, if it exists, to the macros. If the filament does not have an ID, the
+filament type is passed. This takes the following form
+
+```
+{if exists(filament_id)}FILAMENT_ID={filament_id[initial_extruder]}{else}FILAMENT_TYPE={filament_type[initial_extruder]}{endif}
+```
+
+This allows for a somewhat hierarchical printer setup:
+1. If a filament ID is passed, use setting specific to that filament.
+2. If a filament ID is passed but there is now filament specific value for the
+   setting, extract the filament type from the ID and use the type setting.
+3. If there is no filament ID, use the filament type and query the value.
 
 The following type codes are defined:
 
@@ -90,3 +108,4 @@ The following type codes are defined:
 | 100000100 | PLA | eSun PLA+ |
 | 100000200 | PLA | FilamentFusion HTPLA+ |
 | 200000100 | ABS | Sparta ABS+ |
+| 300000100 | PETG | PolyMaker PolyLite PETG |
