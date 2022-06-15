@@ -19,6 +19,17 @@ List of some hardware and software references for printer configuration.
 - Klipper G-Code commands: https://www.klipper3d.org/G-Codes.html
 - Klipper Command Templates: https://www.klipper3d.org/Command_Templates.html
 
+### Flashing MCU Firmware
+For the initial flashing of the Klipper firmware, follow the Voron Documentation. Once Klipper firmware has been
+installed, flashing new versions of the firmware can be done by using the following procedure:
+
+1. Stop klipper: `sudo service klipper stop`
+2. Navigate to the klipper directory: `cd klipper`
+3. Configure the firmware: `make menuconfig`. For instructions on hose to correctly configure settings, follow the
+Voron documentation.
+4. Compile and flash firmware: `make flash FLASH_DEVICE=<YourSerialFromTheConfigFiles>`
+5. Start klipper: `sudo service klipper start`
+
 ## Tuning Guides
 - https://github.com/AndrewEllis93/Print-Tuning-Guide#approximate-values
 
