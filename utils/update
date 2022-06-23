@@ -7,6 +7,7 @@ import getpass
 import pathlib
 import tempfile
 import difflib
+import stat
 import os
 import sys
 
@@ -16,8 +17,9 @@ except ImportError:
     print("This tool requires python3-paramiko.", file=sys.stderr)
     sys.exit(1)
 
-REMOTE_CONF_PATH = "klipper_config"
-LOCAL_CONF_PATH = "../printer/config"
+REMOTE_CONF_PATH = pathlib.PosixPath("klipper_config")
+LOCAL_CONF_PATH = pathlib.PosixPath(os.path.abspath(os.path.join(os.path.dirname(sys.argv[0]),
+                                                                 "../printer/config")))
 
 
 class GColor:  # Gnome supported
@@ -57,12 +59,18 @@ def compare_files(file1, file2):
     return difflib.unified_diff(content1, content2, str(file1), str(file2))
 
 
-def download_config(conn, path):
-    filenames = conn.listdir(REMOTE_CONF_PATH)
+def download_config(conn, path, root=REMOTE_CONF_PATH):
+    filenames = conn.listdir(root.as_posix())
     for filename in filenames:
-        if not filename.endswith(".bkp"):
-            conn.get(os.path.join(REMOTE_CONF_PATH, filename),
-                     os.path.join(path, filename))
+        st = conn.stat(os.path.join(root, filename))
+        if stat.S_ISDIR(st.st_mode):
+            os.mkdir(os.path.join(path, filename))
+            download_config(conn, os.path.join(path, filename),
+                            root / filename)
+        else:
+            if not filename.endswith(".bkp"):
+                conn.get(os.path.join(root, filename),
+                         os.path.join(path, filename))
 
 
 def pull_config(conn, opts, tempdir):
@@ -71,10 +79,24 @@ def pull_config(conn, opts, tempdir):
 
 
 def push_config(conn, opts, tempdir):
-    for filename in os.listdir(opts.path):
-        conn.put(os.path.join(opts.path, filename),
-                 os.path.join(REMOTE_CONF_PATH, filename))
+    for root, dirs, files in os.walk(opts.path):
+        root = pathlib.PosixPath(root)
+        for filename in files:
+            conn.put((root / filename).as_posix(),
+                     (REMOTE_CONF_PATH / root.relative_to(opts.path) / filename).as_posix())
+        for dir in dirs:
+            conn.mkdir(
+                (REMOTE_CONF_PATH / root.relative_to(opts.path) / dir).as_posix())
     return 0
+
+
+def get_fileset(path):
+    file_set = set()
+    for root, dirs, files in os.walk(path):
+        root = pathlib.PosixPath(root)
+        for file in files:
+            file_set |= set([root.relative_to(path) / file])
+    return file_set
 
 
 def show_diff(diff):
@@ -94,8 +116,7 @@ def show_diff(diff):
 def compare_config(conn, opts, tempdir):
     download_config(conn, tempdir)
     opts.path = pathlib.PosixPath(opts.path)
-    file_set = set([x.name for x in opts.path.iterdir()]) | \
-        set([x.name for x in tempdir.iterdir()])
+    file_set = get_fileset(opts.path) | get_fileset(tempdir)
     for filename in file_set:
         result = compare_files(tempdir / filename, opts.path / filename)
         if result:
@@ -107,8 +128,8 @@ def compare_config(conn, opts, tempdir):
 def update_config(conn, opts, tempdir):
     opts.path = pathlib.PosixPath(opts.path)
     download_config(conn, tempdir)
-    local_files = [x.name for x in opts.path.iterdir()]
-    remote_files = [x.name for x in tempdir.iterdir()]
+    local_files = get_fileset(opts.path)
+    remote_files = get_fileset(tempdir)
     for filename in local_files:
         diff = compare_files(tempdir / filename, opts.path / filename)
         if diff:
@@ -142,6 +163,10 @@ def update_config(conn, opts, tempdir):
 
 def clean_temp_dir(path):
     for file in path.iterdir():
+        st = (path / file).stat()
+        if stat.S_ISDIR(st.st_mode):
+            clean_temp_dir(path / file)
+            return
         file.unlink()
     path.rmdir()
 
