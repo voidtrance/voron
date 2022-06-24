@@ -12,8 +12,17 @@ I've modified it to add support for custom GCode execution on either success or 
 
 ```
 [gcode_shell_command COMMAND]
+#value_<var>: <value>
+#   Output value that can be updated by the command. <value>
+#   serves as a default.
 command:
 #   The command line to be executed. This option is required.
+#   The command can update the values for any of the value_*
+#   variables above. In order to do so, the command should
+#   output the update value in the following format:
+#      VALUE_UPDATE:<var>=<value>
+#   Only one value can be updated on a single line. The updated
+#   values are processes as strings.
 #timeout: 2.0
 #   The amount of time (in seconds) to wait before forcefully
 #   terminating the command.
@@ -23,12 +32,16 @@ command:
 #   A list of G-Code commands to execute if the command
 #   completes successfully. If this option is not present
 #   nothing will be executed.
+#   This section is evaluated as a template and can
+#   reference the value_* values.
 #failure:
 #   A list of G-Code commands to execute if the command
 #   does not complete successfully. If this option is not
 #   present nothing will be executed.
+#   This section is evaluated as a template and can
+#   reference the value_* values.
 ```
-### Example
+### Examples
 ```
 [gcode_shell_command my_command]
 command: echo my_command executing
@@ -40,6 +53,14 @@ failure:
 [gcode_macro exec_my_command]
 gcode:
     RUN_SHELL_COMMAND CMD=my_command
+```
+
+```
+[gcode_shell_command my_command]
+value_var1: 0
+command: echo "VALUE_UPDATE:var1=10"
+success:
+    {action_respnd_info("var1=%s" % var1)}
 ```
 
 #### __WARNING__: Infinite Loops

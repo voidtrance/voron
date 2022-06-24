@@ -36,3 +36,18 @@ Voron documentation.
 ## Slicer Settings and Profiles
 - Andrew Ellis PIF Profile: https://github.com/AndrewEllis93/Ellis-PIF-Profile
 - Doc's PrusaSlicer Profile: https://discord.com/channels/460117602945990666/461133450636951552/670982868054310932
+
+## Adaptive Bedmesh
+Adaptive bedmesh is a set of macros and a custom tool that will parse the GCode being printed in order to get
+the bed area being used by the print and adjust the printer's bed mesh calibration accordingly. The goal is to
+speed up the printing time by only generating a mesh for the area the print will use.
+
+### Requirements
+The custom tool requires a version of Moonraker that supports object exclusion. That support was added by commit
+6bd46a443385e35d9f27fdf47581b2fa17f15a7b ("metadata: add support for object postprocessing").
+
+### Installation
+1. Copy [](klipper/tools/adaptive_bedmesh.py) script to `/home/pi/tools`. The directory will have to be created first.
+2. Copy [](config/macros/adaptive_bedmesh.cfg) to `/home/pi/klipper_config`.
+3. Include `adaptive_bedmesh.cfg` in `printer.cfg`
+4. In your `PRINT_START` macro call `ADAPTIVE_BEDMESH` instead of `BED_MESH_CALIBRATE`
