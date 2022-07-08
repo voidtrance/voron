@@ -9,6 +9,7 @@ import tempfile
 import difflib
 import stat
 import os
+import fnmatch
 import sys
 
 try:
@@ -46,6 +47,17 @@ REMOVE_COLOR = GColor.RGB(255, 0, 0)
 ADD_COLOR = GColor.RGB(0, 255, 0)
 
 
+def filter_files(fileset, filters):
+    for filter in filters:
+        matches = [name for name in fileset
+                   if fnmatch.fnmatch(name.as_posix(), filter)]
+        for match in matches:
+            fileset.remove(match)
+
+    for filename in fileset:
+        yield filename
+
+
 def compare_files(file1, file2):
     content1, content2 = [], []
     if file1.exists() and os.access(file1, os.R_OK):
@@ -59,14 +71,14 @@ def compare_files(file1, file2):
     return difflib.unified_diff(content1, content2, str(file1), str(file2))
 
 
-def download_config(conn, path, root=REMOTE_CONF_PATH):
+def download_config(conn, path, root=REMOTE_CONF_PATH, excludes=[]):
     filenames = conn.listdir(root.as_posix())
-    for filename in filenames:
+    for filename in filter_files(filenames, excludes):
         st = conn.stat(os.path.join(root, filename))
         if stat.S_ISDIR(st.st_mode):
             os.mkdir(os.path.join(path, filename))
             download_config(conn, os.path.join(path, filename),
-                            root / filename)
+                            root / filename, excludes)
         else:
             if not filename.endswith(".bkp"):
                 conn.get(os.path.join(root, filename),
@@ -74,14 +86,14 @@ def download_config(conn, path, root=REMOTE_CONF_PATH):
 
 
 def pull_config(conn, opts, tempdir):
-    download_config(conn, opts.path)
+    download_config(conn, opts.path, opts.exclude)
     return 0
 
 
 def push_config(conn, opts, tempdir):
     for root, dirs, files in os.walk(opts.path):
         root = pathlib.PosixPath(root)
-        for filename in files:
+        for filename in filter_files(files, opts.exclude):
             conn.put((root / filename).as_posix(),
                      (REMOTE_CONF_PATH / root.relative_to(opts.path) / filename).as_posix())
         for dir in dirs:
@@ -117,7 +129,7 @@ def compare_config(conn, opts, tempdir):
     download_config(conn, tempdir)
     opts.path = pathlib.PosixPath(opts.path)
     file_set = get_fileset(opts.path) | get_fileset(tempdir)
-    for filename in file_set:
+    for filename in filter_files(file_set, opts.exclude):
         result = compare_files(tempdir / filename, opts.path / filename)
         if result:
             print(f"{TITLE_COLOR}{filename}{GColor.END} differs:")
@@ -130,7 +142,7 @@ def update_config(conn, opts, tempdir):
     download_config(conn, tempdir)
     local_files = get_fileset(opts.path)
     remote_files = get_fileset(tempdir)
-    for filename in local_files:
+    for filename in filter_files(local_files, opts.exclude):
         diff = compare_files(tempdir / filename, opts.path / filename)
         if diff:
             answer = "y"
@@ -147,7 +159,7 @@ def update_config(conn, opts, tempdir):
                          os.path.join(REMOTE_CONF_PATH, filename))
         if filename in remote_files:
             remote_files.remove(filename)
-    for filename in remote_files:
+    for filename in filter_files(remote_files, opts.exclude):
         answer = "y"
         if opts.ask:
             while True:
@@ -174,6 +186,10 @@ def clean_temp_dir(path):
 def main():
     parser = argparse.ArgumentParser(sys.argv[0],
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument("--exclude", action="append", default=[],
+                        help="Exclude file patterns")
+    parser.add_argument("--exclude-file", type=str,
+                        help="File containing a list of exclusion patterns.")
     subparser = parser.add_subparsers(title="Operation Modes")
     pull_parser = subparser.add_parser("pull",
                                        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -210,6 +226,13 @@ def main():
                                help="Printer name/address.")
     update_parser.set_defaults(handler=update_config)
     opts = parser.parse_args(sys.argv[1:])
+
+    if opts.exclude_file:
+        with open(opts.exclude_file, 'r') as fd:
+            for line in fd:
+                if line[0] == "#":
+                    continue
+                opts.exclude.append(line.strip())
 
     tempdir = pathlib.PosixPath(tempfile.mkdtemp(prefix="printer_conf.",
                                                  dir="/tmp"))
