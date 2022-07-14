@@ -31,7 +31,7 @@ Voron documentation.
 5. Start klipper: `sudo service klipper start`
 
 ## Tuning Guides
-- https://github.com/AndrewEllis93/Print-Tuning-Guide#approximate-values
+- https://github.com/AndrewEllis93/Print-Tuning-Guide
 
 ## Slicer Settings and Profiles
 - Andrew Ellis PIF Profile: https://github.com/AndrewEllis93/Ellis-PIF-Profile
@@ -47,7 +47,7 @@ The custom tool requires a version of Moonraker that supports object exclusion. 
 6bd46a443385e35d9f27fdf47581b2fa17f15a7b ("metadata: add support for object postprocessing").
 
 ### Installation
-1. Copy [](klipper/tools/adaptive_bedmesh.py) script to `/home/pi/tools`. The directory will have to be created first.
-2. Copy [](config/macros/adaptive_bedmesh.cfg) to `/home/pi/klipper_config`.
-3. Include `adaptive_bedmesh.cfg` in `printer.cfg`
-4. In your `PRINT_START` macro call `ADAPTIVE_BEDMESH` instead of `BED_MESH_CALIBRATE`
+1. Copy [/printer/klipper/tools/adaptive_bedmesh.py](/printer/klipper/tools/adaptive_bedmesh.py) script to `/home/pi/tools`. The directory will have to be created first.
+2. Copy [/printer/config/macros/adaptive_bedmesh.cfg](/printer/config/macros/adaptive_bedmesh.cfg) to `/home/pi/klipper_config`.
+3. Add `[include adaptive_bedmesh.cfg]` to `printer.cfg`.
+4. In your `PRINT_START` macro call `ADAPTIVE_BEDMESH` instead of `BED_MESH_CALIBRATE`.
