@@ -43,8 +43,9 @@ the bed area being used by the print and adjust the printer's bed mesh calibrati
 speed up the printing time by only generating a mesh for the area the print will use.
 
 ### Requirements
-The custom tool requires a version of Moonraker that supports object exclusion. That support was added by commit
+- The custom tool requires a version of Moonraker that supports object exclusion. That support was added by commit
 6bd46a443385e35d9f27fdf47581b2fa17f15a7b ("metadata: add support for object postprocessing").
+- Modified version of gcode_shell_command.py from [/printer/klipper/extras](/printer/klipper/extras/).
 
 ### Installation
 1. Copy [/printer/klipper/tools/adaptive_bed_mesh.py](/printer/klipper/tools/adaptive_bed_mesh.py) script to `/home/pi/tools`. The directory will have to be created first.
