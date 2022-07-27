@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+#
+# Generate parameters for an adaptive bed mesh
+#
+# Copyright (C) 2022  Mitko Haralanov <voidtrance@gmail.com>
+#
+# This file may be distributed under the terms of the GNU GPLv3 license.
 import os
 import re
 import sys
@@ -13,11 +19,18 @@ EXIT_NO_MESH = 2
 try:
     from preprocess_cancellation import preprocessor
 except ImportError:
-    sys.stderr.write("Failed to import preprocess_cancellation\n")
-    sys.exit(EXIT_ERROR)
+    #sys.stderr.write("Failed to import preprocess_cancellation\n")
+    # sys.exit(EXIT_ERROR)
+    pass
 
 
-arg_parser = argparse.ArgumentParser()
+arg_parser = argparse.ArgumentParser(description="""Generate parameters for
+an adaptive bed mesh. This tool will parse the input GCode file to
+generate a list of printed objects and the are of the bed each
+object takes up. It will then output a set of values that can be
+passed to Klipper's BED_MESH_CALIBRATE command. With these values
+Klipper will be instructed to measure only the area of the print
+bed that will be used by the objects in the GCode file.""")
 arg_parser.add_argument("file", type=str, help="GCode filename")
 arg_parser.add_argument("--mesh_min", type=str, default="0,0",
                         help="Minimum mesh coordinates (X,Y)")
@@ -52,8 +65,8 @@ class Point:
 
 
 class PrintObject:
-    def __init__(self, name):
-        self.name = name
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
 
 
 def get_printed_objects(gcode_file):
@@ -67,7 +80,10 @@ def get_printed_objects(gcode_file):
         tmp_file = os.path.join(tmp_dir_name, os.path.basename(gcode_file))
         with open(gcode_file, 'r') as ifd:
             with open(tmp_file, 'w') as ofd:
-                preprocessor(ifd, ofd)
+                try:
+                    preprocessor(ifd, ofd)
+                except:
+                    return printed_objects
 
         # Next, we go through the processed file extracting all
         # of the object definitions.
@@ -80,9 +96,9 @@ def get_printed_objects(gcode_file):
                     box = []
                     for coord in polygon:
                         box.append(Point(coord[0], coord[1]))
-                    printed = PrintObject(obj.group("name"))
-                    printed.center = center
-                    printed.box = box
+                    printed = PrintObject(name=obj.group("name"),
+                                          center=Point(*center),
+                                          box=box)
                     printed_objects.append(printed)
 
         os.unlink(tmp_file)
@@ -140,6 +156,9 @@ def main():
     opts = parse_params(opts)
 
     objects = get_printed_objects(opts.file)
+    if not objects:
+        return EXIT_ERROR
+
     area = get_print_area(objects, opts.size, opts.margin)
     bed_mesh_area = get_bed_mesh_area(area, opts.mesh_min, opts.mesh_max)
 
@@ -160,8 +179,8 @@ def main():
                   max(3, math.ceil(opts.probes[1] * ratio.y)))
 
         ref_index = int((probes[0] * probes[1]) / 2)
-        output_bed_mesh_params(
-            bed_mesh_area[0], bed_mesh_area[2], probes, ref_index)
+        output_bed_mesh_params(bed_mesh_area[0], bed_mesh_area[2],
+                               probes, ref_index)
 
     return EXIT_SUCCESS
 
