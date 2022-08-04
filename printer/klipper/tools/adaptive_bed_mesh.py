@@ -19,10 +19,8 @@ EXIT_NO_MESH = 2
 try:
     from preprocess_cancellation import preprocessor
 except ImportError:
-    #sys.stderr.write("Failed to import preprocess_cancellation\n")
-    # sys.exit(EXIT_ERROR)
-    pass
-
+    sys.stderr.write("Failed to import preprocess_cancellation\n")
+    sys.exit(EXIT_ERROR)
 
 arg_parser = argparse.ArgumentParser(description="""Generate parameters for
 an adaptive bed mesh. This tool will parse the input GCode file to
@@ -46,6 +44,15 @@ arg_parser.add_argument("--cutoff", type=int, default=10,
                         help="""Area of bed (in percent) that will
                                 serve as a cutoff. If the print area
                                 is smaller, no bedmesh will be done.""")
+arg_parser.add_argument("--use-spacing", type=int, const=0, nargs="?",
+                        default=False,
+                        help="""Generate X and Y probe point counts
+                                that attempt to preserve the spacing
+                                between probe points. If a value is
+                                given, probe counts are adjusted only
+                                if the difference is spacing is greater
+                                that that percentage of the default
+                                spacing.""")
 
 
 OBJECT_REG = re.compile(
@@ -133,7 +140,7 @@ def get_bed_mesh_area(area, mesh_min, mesh_max):
 def output_bed_mesh_params(mesh_min, mesh_max, probes, ref_index):
     print(f"VALUE_UPDATE:min_mesh={mesh_min.x},{mesh_min.y}")
     print(f"VALUE_UPDATE:max_mesh={mesh_max.x},{mesh_max.y}")
-    print(f"VALUE_UPDATE:probe_count={probes[0]},{probes[1]}")
+    print(f"VALUE_UPDATE:probe_count={probes.x},{probes.y}")
     print(f"VALUE_UPDATE:ref_index={ref_index}")
 
 
@@ -147,6 +154,8 @@ def parse_params(options):
         value = getattr(options, attr)
         setattr(options, attr, Point(*value))
     options.cutoff = options.cutoff / 100.0
+    if options.use_spacing:
+        options.use_spacing = options.use_spacing / 100.0
     return options
 
 
@@ -160,14 +169,18 @@ def main():
         return EXIT_ERROR
 
     area = get_print_area(objects, opts.size, opts.margin)
+    default_bed_mesh_size = Point(opts.mesh_max.x - opts.mesh_min.x,
+                                  opts.mesh_max.y - opts.mesh_min.y)
     bed_mesh_area = get_bed_mesh_area(area, opts.mesh_min, opts.mesh_max)
+    bed_mesh_size = Point(bed_mesh_area[2].x - bed_mesh_area[0].x,
+                          bed_mesh_area[2].y - bed_mesh_area[0].y)
 
     if bed_mesh_area[0] == opts.mesh_min and bed_mesh_area[2] == opts.mesh_max:
         output_bed_mesh_params(opts.mesh_min, opts.mesh_max, opts.probes,
                                int((opts.probes[0] * opts.probes[1]) / 2))
     else:
-        ratio = Point((bed_mesh_area[2].x - bed_mesh_area[0].x) / opts.size.x,
-                      (bed_mesh_area[2].y - bed_mesh_area[0].y) / opts.size.y)
+        ratio = Point(bed_mesh_size.x / opts.size.x,
+                      bed_mesh_size.y / opts.size.y)
 
         # If the print area used is less than the cutoff, don't need
         # a bedmesh.
@@ -175,10 +188,20 @@ def main():
             return EXIT_NO_MESH
 
         # Use a minimum of 3 probe points in each dimension
-        probes = (max(3, math.ceil(opts.probes[0] * ratio.x)),
-                  max(3, math.ceil(opts.probes[1] * ratio.y)))
+        probes = Point(max(3, math.ceil(opts.probes[0] * ratio.x)),
+                       max(3, math.ceil(opts.probes[1] * ratio.y)))
 
-        ref_index = int((probes[0] * probes[1]) / 2)
+        if opts.use_spacing:
+            default_spacing = Point(default_bed_mesh_size.x / opts.probes[0],
+                                    default_bed_mesh_size.y / opts.probes[1])
+            spacing = Point(bed_mesh_size.x / probes.x,
+                            bed_mesh_size.y / probes.y)
+            if (spacing.x - default_spacing.x) > (default_spacing.x * opts.use_spacing):
+                probes.x = int(bed_mesh_size.x / default_spacing.x)
+            if (spacing.y - default_spacing.y) > (default_spacing.y * opts.use_spacing):
+                probes.y = int(bed_mesh_size.y / default_spacing.y)
+
+        ref_index = int((probes.x * probes.y) / 2)
         output_bed_mesh_params(bed_mesh_area[0], bed_mesh_area[2],
                                probes, ref_index)
 
