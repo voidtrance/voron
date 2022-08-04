@@ -73,20 +73,23 @@ def compare_files(file1, file2):
 
 def download_config(conn, path, root=REMOTE_CONF_PATH, excludes=[]):
     filenames = conn.listdir(root.as_posix())
+    filenames = [pathlib.PosixPath(x) for x in filenames]
     for filename in filter_files(filenames, excludes):
-        st = conn.stat(os.path.join(root, filename))
+        st = conn.stat((root / filename).as_posix())
         if stat.S_ISDIR(st.st_mode):
             os.mkdir(os.path.join(path, filename))
             download_config(conn, os.path.join(path, filename),
                             root / filename, excludes)
         else:
-            if not filename.endswith(".bkp"):
-                conn.get(os.path.join(root, filename),
+            if not filename.suffix == ".bkp":
+                conn.get((root / filename).as_posix(),
                          os.path.join(path, filename))
 
 
 def pull_config(conn, opts, tempdir):
-    download_config(conn, opts.path, opts.exclude)
+    if not os.path.exists(opts.path):
+        os.makedirs(opts.path)
+    download_config(conn, opts.path, excludes=opts.exclude)
     return 0
 
 
