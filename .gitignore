@@ -1,3 +1,7 @@
+# Ignore the SuperSlicer.ini configuration
+# file. This file is mostly for UI and application
+# configuration.
+SuperSlicer.ini
 slicer/profiles/cache*
 *.bak
 *.pyc
