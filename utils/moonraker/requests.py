@@ -8,7 +8,6 @@ import enum
 class RequestType(enum.IntEnum):
     GET = enum.auto()
     POST = enum.auto()
-    PUT = enum.auto()
 
 
 @enum.unique
@@ -18,7 +17,7 @@ class ResponseType(enum.IntEnum):
 
 
 class Response:
-    def __init__(self, status, data):
+    def __init__(self, status: int, data: str):
         self.status = status
         self.reason = None
         self.data = None
@@ -30,14 +29,14 @@ class Response:
 
 
 class Request:
-    def __init__(self, server, url, method=RequestType.GET):
+    def __init__(self, server: str, url: str, method: RequestType = RequestType.GET):
         self.server = server
         self.url = url
         self.method = method
         self.data = {}
         self.params = []
 
-    def add_params(self, params):
+    def add_params(self, params: str | list | dict):
         if isinstance(params, dict):
             for key, value in params.items():
                 if not value:
@@ -52,10 +51,10 @@ class Request:
         else:
             self.params.append(urllib.parse.quote_plus(params))
 
-    def add_data(self, data):
+    def add_data(self, data: dict):
         self.data.update(data)
 
-    def get(self):
+    def get(self) -> Response:
         url = f"{self.server}/{self.url}"
         if self.params:
             url += f"?{'&'.join(self.params)}"
