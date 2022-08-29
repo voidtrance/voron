@@ -50,5 +50,6 @@ speed up the printing time by only generating a mesh for the area the print will
 ### Installation
 1. Copy [/printer/klipper/tools/adaptive_bed_mesh.py](/printer/klipper/tools/adaptive_bed_mesh.py) script to `/home/pi/tools`. The directory will have to be created first.
 2. Copy [/printer/config/macros/adaptive_bed_mesh.cfg](/printer/config/macros/adaptive_bed_mesh.cfg) to `/home/pi/klipper_config`.
-3. Add `[include adaptive_bed_mesh.cfg]` to `printer.cfg`.
-4. In your `PRINT_START` macro call `ADAPTIVE_BED_MESH_CALIBRATE` instead of `BED_MESH_CALIBRATE`.
+3. Edit `adaptive_bed_mesh.cfg` and replace `--size={user_vars.hw.volume.x},{user_vars.hw.volume.y}` with `--size=<your printer size>,<your printer size>`, where `<your printer size> is either 250, 300, or 350.
+4. Add `[include adaptive_bed_mesh.cfg]` to `printer.cfg`.
+5. In your `PRINT_START` macro call `ADAPTIVE_BED_MESH_CALIBRATE` instead of `BED_MESH_CALIBRATE`.
