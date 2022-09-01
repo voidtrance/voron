@@ -1,3 +1,4 @@
 # Exclude the Obico config so we don't expose the
 # access token
 moonraker-obico.cfg
+*.bkp

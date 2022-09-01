@@ -47,15 +47,107 @@ REMOVE_COLOR = GColor.RGB(255, 0, 0)
 ADD_COLOR = GColor.RGB(0, 255, 0)
 
 
-def filter_files(fileset, filters):
-    for filter in filters:
-        matches = [name for name in fileset
-                   if fnmatch.fnmatch(name.as_posix(), filter)]
-        for match in matches:
-            fileset.remove(match)
+class PrinterConfig:
+    def __init__(self, connection, remote_root, local_root):
+        self.connection = connection
+        self.remote_root = pathlib.PosixPath(remote_root)
+        self.local_root = pathlib.PosixPath(local_root)
+        self.filters = []
 
-    for filename in fileset:
-        yield filename
+    def set_file_filters(self, filters):
+        if not isinstance(filters, list):
+            filters = [filters]
+        self.filters += filters
+
+    def filter_files(self, fileset):
+        for filter in self.filters:
+            matches = [name for name in fileset
+                       if fnmatch.fnmatch(name, filter)]
+            for match in matches:
+                fileset.remove(match)
+
+        for filename in fileset:
+            yield filename
+
+    def __get_remote_files_func(self, root, filtered):
+        filenames = self.connection.listdir(root.as_posix())
+        if filtered:
+            filenames = [pathlib.PosixPath(x)
+                         for x in self.filter_files(filenames)]
+        remote_files = []
+        for filename in filenames:
+            st = self.connection.stat((root / filename).as_posix())
+            if stat.S_ISDIR(st.st_mode):
+                remote_files += self.__get_remote_files_func(
+                    root / filename, filtered)
+            else:
+                remote_files.append(root / filename)
+        return remote_files
+
+    def __get_local_files_func(self, root, filtered):
+        filenames = []
+        for root, dirs, files in os.walk(root):
+            root = pathlib.PosixPath(root)
+            if filtered:
+                filenames += [root / x for x in self.filter_files(files)]
+            else:
+                filenames = [root / x for x in files]
+            for d in dirs:
+                filenames += self.__get_local_files_func(root / d, filtered)
+        return filenames
+
+    def get_remote_files(self, filtered=True):
+        files = self.__get_remote_files_func(self.remote_root, filtered)
+        return [x.relative_to(self.remote_root) for x in files]
+
+    def get_local_files(self, filtered=True):
+        files = self.__get_local_files_func(self.local_root, filtered)
+        return [x.relative_to(self.local_root) for x in files]
+
+    def download_file(self, filename, local_root=None):
+        if not local_root:
+            local_root = self.local_root
+        local_root = pathlib.PosixPath(local_root)
+        st = self.connection.stat((self.remote_root / filename).as_posix())
+        if stat.S_ISDIR(st.st_mode):
+            local_dir = local_root / filename
+        else:
+            local_dir = local_root / filename.parent
+        local_dir.mkdir(exist_ok=True)
+        # print(
+        #    f"Downloading {self.remote_root / filename} to {local_root / filename}")
+        self.connection.get((self.remote_root / filename).as_posix(),
+                            (local_root / filename).as_posix())
+
+    def upload_file(self, filename):
+        remote_dir = self.remote_root / filename.parent
+        try:
+            st = self.connection.stat(remote_dir.as_posix())
+        except FileNotFoundError:
+            for pindex in range(len(remote_dir.parents)-1, -1, -1):
+                st = self.connection.stat(
+                    (self.remote_root / remote_dir.parents[pindex]).as_posix())
+                if stat.S_ISDIR(st.st_mode):
+                    continue
+                self.connection.mkdir(
+                    self.remote_root / remote_dir.parents[pindex].as_posix())
+        self.connection.put((self.local_root / filename).as_posix(),
+                            (self.remote_root / filename).as_posix())
+
+    def remove_file(self, filename, remove_empty_dirs=False):
+        try:
+            st = self.connection.stat((self.remote_root / filename).as_posix())
+        except FileNotFoundError:
+            return
+        self.connection.remove((self.remote_root / filename).as_posix())
+        if remove_empty_dirs:
+            remote_dir = self.remote_root / filename.parent
+            while remote_dir != self.remote_root:
+                dir_files = self.connection.listdir(remote_dir.as_posix())
+                if dir_files:
+                    break
+                self.connection.rmdir(remote_dir.as_posix())
+                remote_dir = remote_dir.parent
 
 
 def compare_files(file1, file2):
@@ -63,55 +155,32 @@ def compare_files(file1, file2):
     if file1.exists() and os.access(file1, os.R_OK):
         with (open(file1, 'r')) as fd:
             content1 = fd.readlines()
+    else:
+        content1 = ""
     if file2.exists() and os.access(file2, os.R_OK):
         with open(file2, 'r') as fd:
             content2 = fd.readlines()
+    else:
+        content2 = ""
     if content1 == content2:
         return None
     return difflib.unified_diff(content1, content2, str(file1), str(file2))
 
 
-def download_config(conn, path, root=REMOTE_CONF_PATH, excludes=[]):
-    filenames = conn.listdir(root.as_posix())
-    filenames = [pathlib.PosixPath(x) for x in filenames]
-    for filename in filter_files(filenames, excludes):
-        st = conn.stat((root / filename).as_posix())
-        if stat.S_ISDIR(st.st_mode):
-            os.mkdir(os.path.join(path, filename))
-            download_config(conn, os.path.join(path, filename),
-                            root / filename, excludes)
-        else:
-            if not filename.suffix == ".bkp":
-                conn.get((root / filename).as_posix(),
-                         os.path.join(path, filename))
-
-
-def pull_config(conn, opts, tempdir):
+def pull_config(config, opts, tempdir):
     if not os.path.exists(opts.path):
         os.makedirs(opts.path)
-    download_config(conn, opts.path, excludes=opts.exclude)
+    files = config.get_remote_files(True)
+    for filename in files:
+        config.download_file(filename)
     return 0
 
 
-def push_config(conn, opts, tempdir):
-    for root, dirs, files in os.walk(opts.path):
-        root = pathlib.PosixPath(root)
-        for filename in filter_files(files, opts.exclude):
-            conn.put((root / filename).as_posix(),
-                     (REMOTE_CONF_PATH / root.relative_to(opts.path) / filename).as_posix())
-        for dir in dirs:
-            conn.mkdir(
-                (REMOTE_CONF_PATH / root.relative_to(opts.path) / dir).as_posix())
+def push_config(config, opts, tempdir):
+    files = config.get_local_files(True)
+    for filename in files:
+        config.upload_file(filename)
     return 0
-
-
-def get_fileset(path):
-    file_set = set()
-    for root, dirs, files in os.walk(path):
-        root = pathlib.PosixPath(root)
-        for file in files:
-            file_set |= set([root.relative_to(path) / file])
-    return file_set
 
 
 def show_diff(diff):
@@ -128,11 +197,13 @@ def show_diff(diff):
             print(f"   {line}", end="")
 
 
-def compare_config(conn, opts, tempdir):
-    download_config(conn, tempdir)
-    opts.path = pathlib.PosixPath(opts.path)
-    file_set = get_fileset(opts.path) | get_fileset(tempdir)
-    for filename in filter_files(file_set, opts.exclude):
+def compare_config(config, opts, tempdir):
+    remote_files = config.get_remote_files(True)
+    for filename in remote_files:
+        config.download_file(filename, tempdir)
+    file_set = set(config.get_local_files(True)) | set(
+        config.get_remote_files(True))
+    for filename in file_set:
         result = compare_files(tempdir / filename, opts.path / filename)
         if result:
             print(f"{TITLE_COLOR}{filename}{GColor.END} differs:")
@@ -140,12 +211,13 @@ def compare_config(conn, opts, tempdir):
     return 0
 
 
-def update_config(conn, opts, tempdir):
-    opts.path = pathlib.PosixPath(opts.path)
-    download_config(conn, tempdir)
-    local_files = get_fileset(opts.path)
-    remote_files = get_fileset(tempdir)
-    for filename in filter_files(local_files, opts.exclude):
+def update_config(config, opts, tempdir):
+    remote_files = config.get_remote_files(True)
+    for filename in remote_files:
+        config.download_file(filename, tempdir)
+    local_files = set(config.get_local_files(True))
+    remote_files = set(config.get_remote_files(True))
+    for filename in local_files:
         diff = compare_files(tempdir / filename, opts.path / filename)
         if diff:
             answer = "y"
@@ -158,11 +230,10 @@ def update_config(conn, opts, tempdir):
                         break
             if answer == "y":
                 print(f"Updating {filename}...")
-                conn.put(os.path.join(opts.path, filename),
-                         os.path.join(REMOTE_CONF_PATH, filename))
+                config.upload_file(filename)
         if filename in remote_files:
             remote_files.remove(filename)
-    for filename in filter_files(remote_files, opts.exclude):
+    for filename in remote_files - local_files:
         answer = "y"
         if opts.ask:
             while True:
@@ -172,7 +243,7 @@ def update_config(conn, opts, tempdir):
                     break
         if answer == "y":
             print(f"Removing {filename}...")
-            conn.remove(os.path.join(REMOTE_CONF_PATH, filename))
+            config.remove_file(filename)
     return 0
 
 
@@ -181,8 +252,8 @@ def clean_temp_dir(path):
         st = (path / file).stat()
         if stat.S_ISDIR(st.st_mode):
             clean_temp_dir(path / file)
-            return
-        file.unlink()
+        else:
+            file.unlink()
     path.rmdir()
 
 
@@ -197,7 +268,7 @@ def main():
     pull_parser = subparser.add_parser("pull",
                                        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
                                        help="Download configuration files.")
-    pull_parser.add_argument("--path", type=str,
+    pull_parser.add_argument("--path", type=str, default=LOCAL_CONF_PATH,
                              help="Directory where configuration files will be stored.")
     pull_parser.add_argument("printer", type=str,
                              help="Printer name/address.")
@@ -256,7 +327,9 @@ def main():
     # be used for all transfers
     sftp = client.open_sftp()
 
-    status = opts.handler(sftp, opts, tempdir)
+    config = PrinterConfig(sftp, REMOTE_CONF_PATH, opts.path)
+    config.set_file_filters(opts.exclude)
+    status = opts.handler(config, opts, tempdir)
 
     client.close()
     clean_temp_dir(tempdir)
