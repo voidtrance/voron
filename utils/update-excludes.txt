@@ -2,3 +2,4 @@
 # access token
 moonraker-obico.cfg
 *.bkp
+webcam.txt
