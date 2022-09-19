@@ -28,7 +28,8 @@ generate a list of printed objects and the are of the bed each
 object takes up. It will then output a set of values that can be
 passed to Klipper's BED_MESH_CALIBRATE command. With these values
 Klipper will be instructed to measure only the area of the print
-bed that will be used by the objects in the GCode file.""")
+bed that will be used by the objects in the GCode file.""",
+                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 arg_parser.add_argument("file", type=str, help="GCode filename")
 arg_parser.add_argument("--mesh_min", type=str, default="0,0",
                         help="Minimum mesh coordinates (X,Y)")
@@ -37,13 +38,17 @@ arg_parser.add_argument("--mesh_max", type=str, default="0,0",
 arg_parser.add_argument("--probes", type=str, default="0,0",
                         help="Number of probe points (X,Y)")
 arg_parser.add_argument("--size", type=str, required=True,
-                        help="Printer bed size")
+                        help="Printer bed size (X,Y)")
 arg_parser.add_argument("--margin", type=float, default=5.0,
                         help="Margin (in mm) to add to print area")
 arg_parser.add_argument("--cutoff", type=int, default=10,
                         help="""Area of bed (in percent) that will
                                 serve as a cutoff. If the print area
-                                is smaller, no bedmesh will be done.""")
+                                is smaller, no bed meshing will be
+                                done.""")
+arg_parser.add_argument("--algo", type=str, default="lagrange",
+                        choices=["lagrange", "bicubic"],
+                        help="Bed mesh interpolation algorithm.")
 arg_parser.add_argument("--use-spacing", type=int, const=0, nargs="?",
                         default=False,
                         help="""Generate X and Y probe point counts
@@ -51,7 +56,7 @@ arg_parser.add_argument("--use-spacing", type=int, const=0, nargs="?",
                                 between probe points. If a value is
                                 given, probe counts are adjusted only
                                 if the difference is spacing is greater
-                                that that percentage of the default
+                                than this percentage of the default
                                 spacing.""")
 
 
@@ -161,7 +166,6 @@ def parse_params(options):
 
 def main():
     opts = arg_parser.parse_args(sys.argv[1:])
-
     opts = parse_params(opts)
 
     objects = get_printed_objects(opts.file)
@@ -182,14 +186,29 @@ def main():
         ratio = Point(bed_mesh_size.x / opts.size.x,
                       bed_mesh_size.y / opts.size.y)
 
+        # Set minimum and maximum probe counts based on the used
+        # algorithm. For more information on this, see
+        # https://www.klipper3d.org/Bed_Mesh.html?h=bicubic#mesh-interpolation
+        if opts.algo == "lagrange":
+            min_probe_count = 2
+            max_probe_count = 6
+        else:
+            min_probe_count = 4
+            max_probe_count = 9999
+
         # If the print area used is less than the cutoff, don't need
         # a bedmesh.
         if ratio.x <= opts.cutoff and ratio.y <= opts.cutoff:
             return EXIT_NO_MESH
 
-        # Use a minimum of 3 probe points in each dimension
-        probes = Point(max(3, math.ceil(opts.probes[0] * ratio.x)),
-                       max(3, math.ceil(opts.probes[1] * ratio.y)))
+        # Compute the number of probes to be used based on print
+        # area ratio and min/max probe counts for each algorithm.
+        probes = Point(min(max(min_probe_count,
+                               math.ceil(opts.probes[0] * ratio.x)),
+                           max_probe_count),
+                       min(max(min_probe_count,
+                               math.ceil(opts.probes[1] * ratio.y)),
+                           max_probe_count))
 
         if opts.use_spacing:
             default_spacing = Point(default_bed_mesh_size.x / opts.probes[0],
@@ -201,7 +220,11 @@ def main():
             if (spacing.y - default_spacing.y) > (default_spacing.y * opts.use_spacing):
                 probes.y = int(bed_mesh_size.y / default_spacing.y)
 
-        ref_index = int((probes.x * probes.y) / 2)
+        total_probes = probes.x * probes.y
+
+        # If the total number of probes is odd, there is a probe point
+        # that is exactly in the middle of the bed.
+        ref_index = int(total_probes / 2) + (total_probes % 2)
         output_bed_mesh_params(bed_mesh_area[0], bed_mesh_area[2],
                                probes, ref_index)
 
