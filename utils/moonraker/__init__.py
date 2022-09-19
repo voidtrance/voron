@@ -153,3 +153,43 @@ class Connection:
                 response.data == "ok":
             return True
         return False
+
+    def firmware_restart(self) -> bool:
+        """
+        Restart the printer's MCU firmware.
+
+        Parameters
+        ----------
+            None
+
+        Returns
+        -------
+            True if restart succeeded. False, otherwise.
+        """
+        request = requests.Request(self.address, "printer/firmware_restart",
+                                   requests.RequestType.POST)
+        response = request.get()
+        if response.status == requests.ResponseType.SUCCESS and \
+                response.data == "ok":
+            return True
+        return False
+
+    def host_restart(self) -> bool:
+        """
+        Restart host software.
+
+        Parameters
+        ----------
+            None
+
+        Returns
+        -------
+            True on success. False, otherwise.
+        """
+        request = requests.Request(self.address, "printer/restart",
+                                   requests.RequestType.POST)
+        response = request.get()
+        if response.status == requests.ResponseType.SUCCESS and \
+                response.data == "ok":
+            return True
+        return False

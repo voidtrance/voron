@@ -11,6 +11,7 @@ import stat
 import os
 import fnmatch
 import sys
+import moonraker
 
 try:
     import paramiko
@@ -180,6 +181,9 @@ def push_config(config, opts, tempdir):
     files = config.get_local_files(True)
     for filename in files:
         config.upload_file(filename)
+    if opts.restart:
+        printer = moonraker.Connection(opts.printer)
+        printer.firmware_restart()
     return 0
 
 
@@ -212,6 +216,7 @@ def compare_config(config, opts, tempdir):
 
 
 def update_config(config, opts, tempdir):
+    files_updated = False
     remote_files = config.get_remote_files(True)
     for filename in remote_files:
         config.download_file(filename, tempdir)
@@ -231,6 +236,7 @@ def update_config(config, opts, tempdir):
             if answer == "y":
                 print(f"Updating {filename}...")
                 config.upload_file(filename)
+                files_updated = True
         if filename in remote_files:
             remote_files.remove(filename)
     for filename in remote_files - local_files:
@@ -244,6 +250,10 @@ def update_config(config, opts, tempdir):
         if answer == "y":
             print(f"Removing {filename}...")
             config.remove_file(filename)
+            files_updated = True
+    if opts.restart and files_updated:
+        printer = moonraker.Connection(opts.printer)
+        printer.firmware_restart()
     return 0
 
 
@@ -278,6 +288,8 @@ def main():
                                        help="Upload local configuration to printer.")
     push_parser.add_argument("--path", type=str, default=LOCAL_CONF_PATH,
                              help="Configuration file source directory")
+    push_parser.add_argument("--restart", action="store_true",
+                             help="Restart firmare after config push.")
     push_parser.add_argument("printer", type=str,
                              help="Printer name/address.")
     push_parser.set_defaults(handler=push_config)
@@ -296,6 +308,8 @@ def main():
                                help="Configuration files source directory.")
     update_parser.add_argument("--ask", action="store_true",
                                help="Ask for confirmation before update file.")
+    update_parser.add_argument("--restart", action="store_true",
+                               help="Restart firmware after config update.")
     update_parser.add_argument("printer", type=str,
                                help="Printer name/address.")
     update_parser.set_defaults(handler=update_config)
