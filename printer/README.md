@@ -25,7 +25,7 @@ installed, flashing new versions of the firmware can be done by using the follow
 
 1. Stop klipper: `sudo service klipper stop`
 2. Navigate to the klipper directory: `cd klipper`
-3. Configure the firmware: `make menuconfig`. For instructions on hose to correctly configure settings, follow the
+3. Configure the firmware: `make menuconfig`. For instructions on how to correctly configure settings, follow the
 Voron documentation.
 4. Compile and flash firmware: `make flash FLASH_DEVICE=<YourSerialFromTheConfigFiles>`
 5. Start klipper: `sudo service klipper start`
@@ -44,12 +44,17 @@ speed up the printing time by only generating a mesh for the area the print will
 
 ### Requirements
 - The custom tool requires a version of Moonraker that supports object exclusion. That support was added by commit
-6bd46a443385e35d9f27fdf47581b2fa17f15a7b ("metadata: add support for object postprocessing").
+6bd46a443385e35d9f27fdf47581b2fa17f15a7b ("metadata: add support for object postprocessing"). It is not necessary
+to enable object exclusion in Moonraker and/or Klipper. Adaptive Bedmesh just uses the GCode parser that is included
+in Moonraker for the purposes of object exclusion. 
 - Modified version of gcode_shell_command.py from [/printer/klipper/extras](/printer/klipper/extras/).
 
 ### Installation
-1. Copy [/printer/klipper/tools/adaptive_bed_mesh.py](/printer/klipper/tools/adaptive_bed_mesh.py) script to `/home/pi/tools`. The directory will have to be created first.
-2. Copy [/printer/config/macros/adaptive_bed_mesh.cfg](/printer/config/macros/adaptive_bed_mesh.cfg) to `/home/pi/klipper_config`.
-3. Edit `adaptive_bed_mesh.cfg` and replace `--size={user_vars.hw.volume.x},{user_vars.hw.volume.y}` with `--size=<your printer size>,<your printer size>`, where `<your printer size> is either 250, 300, or 350.
+1. Copy [/printer/klipper/tools/adaptive_bed_mesh.py](/printer/klipper/tools/adaptive_bed_mesh.py) script to 
+`/home/pi/tools`. The directory will have to be created first.
+2. Copy [/printer/config/macros/adaptive_bed_mesh.cfg](/printer/config/macros/adaptive_bed_mesh.cfg) to 
+`/home/pi/klipper_config`.
+3. Edit `adaptive_bed_mesh.cfg` and replace `--size={user_vars.hw.volume.x},{user_vars.hw.volume.y}` with 
+`--size=<your printer size>,<your printer size>`, where `<your printer size> is either 250, 300, or 350.
 4. Add `[include adaptive_bed_mesh.cfg]` to `printer.cfg`.
 5. In your `PRINT_START` macro call `ADAPTIVE_BED_MESH_CALIBRATE` instead of `BED_MESH_CALIBRATE`.
