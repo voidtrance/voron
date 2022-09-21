@@ -95,7 +95,7 @@ smoothly.
 The led_interpolate.py extension does that. It will smoothly transition a set
 of LEDs from their current color/brightness to a given color/brightness.
 
-## Setup
+### Setup
 
 After installing the extention, add the following to your config file to enable
 the `LED_INTERPOLATE` command:
@@ -104,7 +104,7 @@ the `LED_INTERPOLATE` command:
 [led_interpolate]
 ```
 
-## Usage
+### Usage
 
 ```
 LED_INTERPOLATE LED=<config_name> RED=<value> GREEN=<value> BLUE=<value> [WHITE=<value>] [FACTOR=<value>]
@@ -116,7 +116,7 @@ LEDs. If the LEDs are chained, the entire chain will be transitioned. `FACTOR`
 can be used to alter the amount by which each step in the transition will change
  the current color.
 
-## Known Issues
+### Known Issues
 
 * The algorithm is not perfect when it comes to interpolating a chain of LEDs
   which have different starting values. It does its best to get all LEDs in the
