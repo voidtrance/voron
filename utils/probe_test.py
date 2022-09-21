@@ -25,6 +25,9 @@ parser.add_argument("--min-move-speed", type=int, default=300,
                     help="Minimum movement speed (mm/min).")
 parser.add_argument("--max-move-speed", type=int, default=20000,
                     help="Maximum movement speed (mm/min).")
+parser.add_argument("--no-qgl", action="store_true",
+                    help="""Don't do Quad Gantry Leveling
+                     before running tests.""")
 parser.add_argument("printer", default="localhost",
                     help="Network name of the printer")
 
@@ -143,14 +146,18 @@ def main():
             return 1
         print("done.")
 
-    # Level the printer if not leveled
-    leveled = printer.query_object("quad_gantry_level", ["applied"])
-    if not leveled["applied"]:
-        print("Leveling printer...", end=" ", flush=True)
-        if not printer.exec_gcode("QUAD_GANTRY_LEVEL"):
-            print("Failed to level printer.")
-            return 1
-        print("done.")
+    if not opts.no_gql:
+        # Level the printer if not leveled
+        leveled = printer.query_object("quad_gantry_level", ["applied"])
+        if not leveled["applied"]:
+            print("Leveling printer...", end=" ", flush=True)
+            if not printer.exec_gcode("QUAD_GANTRY_LEVEL"):
+                print("Failed to level printer.")
+                return 1
+            print("done.")
+    else:
+        print("Skipping gantry leveling!", file=sys.stderr)
+        print("WARNING: In extreme cases, this may cause issues!", file=sys.stderr)
 
     # Now, run tests...
     print("Running Dock/Undock test...", end=" ", flush=True)
