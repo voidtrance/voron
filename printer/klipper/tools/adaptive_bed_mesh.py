@@ -220,11 +220,14 @@ def main():
             if (spacing.y - default_spacing.y) > (default_spacing.y * opts.use_spacing):
                 probes.y = int(bed_mesh_size.y / default_spacing.y)
 
-        total_probes = probes.x * probes.y
-
+        # Compute the Relative Reference Index as close to the middle of
+        # the bed mesh as possible. Note that the probe point indexes are
+        # 0-based.
         # If the total number of probes is odd, there is a probe point
         # that is exactly in the middle of the bed.
-        ref_index = int(total_probes / 2) + (total_probes % 2)
+        total_probes = probes.x * probes.y
+        ref_index = (int((total_probes - 1) / 2) - 1) + (total_probes % 2)
+
         output_bed_mesh_params(bed_mesh_area[0], bed_mesh_area[2],
                                probes, ref_index)
 
