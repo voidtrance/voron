@@ -3,5 +3,6 @@
 # configuration.
 SuperSlicer.ini
 slicer/profiles/cache*
+slicer/profiles/ui_layout*
 *.bak
 *.pyc
