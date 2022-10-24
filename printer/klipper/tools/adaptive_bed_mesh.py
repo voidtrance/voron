@@ -58,6 +58,10 @@ arg_parser.add_argument("--use-spacing", type=int, const=0, nargs="?",
                                 if the difference is spacing is greater
                                 than this percentage of the default
                                 spacing.""")
+arg_parser.add_argument("--absolute-spacing", action="store_true",
+                        help="""The spacing value specified by
+                                --use-spacing is in mm instead of
+                                percent.""")
 
 
 OBJECT_REG = re.compile(
@@ -215,10 +219,14 @@ def main():
                                     default_bed_mesh_size.y / opts.probes[1])
             spacing = Point(bed_mesh_size.x / probes.x,
                             bed_mesh_size.y / probes.y)
-            if (spacing.x - default_spacing.x) > (default_spacing.x * opts.use_spacing):
-                probes.x = int(bed_mesh_size.x / default_spacing.x)
-            if (spacing.y - default_spacing.y) > (default_spacing.y * opts.use_spacing):
-                probes.y = int(bed_mesh_size.y / default_spacing.y)
+            if not opts.absolute_spacing:
+                if (spacing.x - default_spacing.x) > (default_spacing.x * opts.use_spacing):
+                    probes.x = int(bed_mesh_size.x / default_spacing.x)
+                if (spacing.y - default_spacing.y) > (default_spacing.y * opts.use_spacing):
+                    probes.y = int(bed_mesh_size.y / default_spacing.y)
+            else:
+                probes.x = int(bed_mesh_size.x / opts.use_spacing)
+                probes.y = int(bed_mesh_size.y / opts.use_spacing)
 
         # Compute the Relative Reference Index as close to the middle of
         # the bed mesh as possible. Note that the probe point indexes are
