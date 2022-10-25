@@ -214,10 +214,42 @@ Then callers can trigger the macro as such:
 EXAMPLE1 VALUE1=<value>
 ```
 
-The value set for the `VALUE1` parameter will automatically be available from `params.VALUE1`. 
+The value set for the `VALUE1` parameter will automatically be available from `params.VALUE1`.
+
+Parameter values are always stored as strings. Therefore, it may be necessary to perform a
+conversion to a more appropriate type (integer, float, list, etc.). This can be done through the
+use of Jinja's filters[^6]. Filters are applied to values through the pipe (`|`) operator.
+While a full discussion on filters is beyond the scope of this guide, common filters are
+`int`, `float`, `split`.
+
+```gcode
+[gcode_macro EXAMPLE5]
+gcode:
+    {% set var_int = params.INT_VALUE|int %}
+    {% set var_float = params.FLOAT_VALUE|float %}
+    {% set var_list = params.LIST_VALUE|split(",") %}
+```
+
+Another useful filter is the `default()` filter, which will assign a default value to a
+parameter:
+
+```gcode
+[gcode_macro EXAMPLE6]
+gcode:
+    {% set var_int = params.INT_VALUE|default(5)|int %}
+    {% set var_float = params.FLOAT_VALUE|default(2.5)|float %}
+```
+
+The difference between `EXAMPLE5` and `EXAMPLE6` is that `EXAMPLE5` requires the parameters
+be set when triggering the macro. Otherwise, Klipper will generate an error due to the
+missing parameters. On the other hand, `EXAMPLE6` can be called without using any parameters,
+in which case, the default values provided by the `default()` filter will be used.
+
+As you can see, filters can be chained one after the other to provide fuller control over
+parameter values and types.
 
 ## Delayed GCode
-Delayed GCode[^6] macro are a way to schedule a macro to be executed at a later time. They are
+Delayed GCode[^7] macro are a way to schedule a macro to be executed at a later time. They are
 mostly the same as normal macros with the following exceptions:
   * The only key/value pairs that are valid are `gcode` and `initial_duration`.
   * They cannot define variables.
@@ -280,10 +312,50 @@ The above example makes uses of several feature of Klipper macros:
   3. Ability to reference macro variables from other macros.
   4. Ability to set macro variables from other macros.
 
+### Background Macros
+One of the more common uses of delayed GCode macros is to create "background" macros - macros that
+execute somewhat asynchronously in the background. This is done by creating the delayed GCode macro
+in such a way that it repeatedly schedules itself based on current conditions. This is possible
+because Klipper updates the current state of the printer just prior to executing the macro. Below
+is a simple example of this:
+
+```gcode
+[delayed_gcode DELAYED_GCODE_MACRO3]
+gcode:
+    {% set current_temp = printer[printer.toolhead.extruder].temperature %}
+    {% set target_temp = printer[printer.toolhead.extruder].target %}
+
+    {% if current_temp < target_temp> %}
+        M117 Still heating...
+        UPDATE_DELAYED_GCODE ID=DELAYED_GCODE_MACRO3 DURATION=1
+    {% else %}
+        M117 Target temperature reached
+        UPDATE_DELAYED_GCODE ID=DELAYED_GCODE_MACRO3 DURATION=0
+    {% endif %}
+
+[gcode_macro HEAT_EXTRUDER]
+gcode:
+    M104 S240
+    UPDATE_DELAYED_GCODE ID=DELAYED_GCODE_MACRO3 DURATION=1
+```
+
+The above example shows how delayed GCode macros can be used to implement a pseudo `while` loop.
+When triggered, the `HEAD_EXTRUDER` macro will set the extruder temperature to 240 degrees and
+schedule the `DELAYED_GCODE_MACRO3` to execute in 1 second.
+
+When the `DELAYED_GCODE_MACRO3` executes, it will look up the current and target temperature of
+the extruder. If the current temperature is less than the target, it will re-schedule itself to
+run again after 1 second. Otherwise, it will cancel itself.
+
+> **Warning** Be careful when using the above mechanism to create background macros. In most case,
+> it is difficult to implement the exact desired behavior due to the limitations imposed by Klipper
+> and delayed GCode macros.
+
 ## References
   [^1]: Klipper Documentation: https://www.klipper3d.org/
   [^2]: Klipper GCode command reference: https://www.klipper3d.org/G-Codes.html
   [^3]: Klipper Command Templates: https://www.klipper3d.org/Command_Templates.html
   [^4]: Jinja Documentation: https://jinja.palletsprojects.com/en/2.10.x/templates/#
   [^5]: https://www.klipper3d.org/Command_Templates.html?h=printer#the-printer-variable
-  [^6]: https://www.klipper3d.org/Command_Templates.html?h=delayed#delayed-gcodes
+  [^6]: https://jinja.palletsprojects.com/en/3.1.x/templates/#filters
+  [^7]: https://www.klipper3d.org/Command_Templates.html?h=delayed#delayed-gcodes
