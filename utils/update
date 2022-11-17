@@ -12,6 +12,8 @@ import os
 import fnmatch
 import sys
 import moonraker
+import configparser
+from shutil import copy2 as filecopy
 
 try:
     import paramiko
@@ -19,9 +21,11 @@ except ImportError:
     print("This tool requires python3-paramiko.", file=sys.stderr)
     sys.exit(1)
 
+SCRIPT_PATH = pathlib.PosixPath(os.path.dirname(sys.argv[0])).absolute()
+REPO_TOP = SCRIPT_PATH.parent
 REMOTE_CONF_PATH = pathlib.PosixPath("klipper_config")
-LOCAL_CONF_PATH = pathlib.PosixPath(os.path.abspath(os.path.join(os.path.dirname(sys.argv[0]),
-                                                                 "../printer/config")))
+LOCAL_CONF_PATH = REPO_TOP / "printer" / "config"
+DEFAULT_CONFIG = SCRIPT_PATH / "update.conf"
 
 
 class GColor:  # Gnome supported
@@ -267,13 +271,48 @@ def clean_temp_dir(path):
     path.rmdir()
 
 
+def config_parser_list_converter(value):
+    return [x for x in value.split("\n") if x]
+
+
+def update_from_external(src, dest, path, excludes):
+    src = REPO_TOP / src
+    dest = pathlib.PosixPath(path) / \
+        (REPO_TOP / dest).relative_to(LOCAL_CONF_PATH)
+    if not src.exists():
+        print(f"External source ({src}) not found.")
+        return -1
+    if not dest.exists():
+        print(f"External destination ({dest}) not found.")
+        return -1
+    fileset = [x.relative_to(src) for x in src.iterdir()]
+    for pattern in excludes:
+        matches = [f for f in fileset if fnmatch.fnmatch(f, pattern)]
+        for match in matches:
+            fileset.remove(match)
+
+    for filename in fileset:
+        if not (dest / filename).exists():
+            print(f"File {filename} missing from dest")
+        diff = compare_files(src / filename, dest / filename)
+        if not diff:
+            continue
+        try:
+            filecopy(src / filename, dest / filename)
+        except Exception as err:
+            print(err)
+            return -1
+
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(sys.argv[0],
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument("--config", default=DEFAULT_CONFIG,
+                        help="Tool configuration file.")
     parser.add_argument("--exclude", action="append", default=[],
                         help="Exclude file patterns")
-    parser.add_argument("--exclude-file", type=str,
-                        help="File containing a list of exclusion patterns.")
     subparser = parser.add_subparsers(title="Operation Modes")
     pull_parser = subparser.add_parser("pull",
                                        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -315,19 +354,37 @@ def main():
     update_parser.set_defaults(handler=update_config)
     opts = parser.parse_args(sys.argv[1:])
 
-    if opts.exclude_file:
-        with open(opts.exclude_file, 'r') as fd:
-            for line in fd:
-                if line[0] == "#":
-                    continue
-                opts.exclude.append(line.strip())
+    config = configparser.ConfigParser(
+        converters={"list": config_parser_list_converter})
+    config.read(opts.config)
+
+    if not config.has_section("global"):
+        print("'global' section missing from configuration!")
+        return 1
+
+    for exclude in config.getlist("global", "exclude"):
+        opts.exclude.append(exclude)
 
     tempdir = pathlib.PosixPath(tempfile.mkdtemp(prefix="printer_conf.",
                                                  dir="/tmp"))
     tempdir.mkdir(parents=True, exist_ok=True)
-    printer_pass = getpass.getpass("Printer access password: ")
+
+    # First, sync all files from external locations to
+    # the local paths.
+    for external in config.getlist("global", "external"):
+        if external not in config:
+            print(f"Section '{external}' missing from config.")
+            return 1
+        print(f"Update from external source: {external}...")
+        if update_from_external(config.get(external, "source"),
+                                config.get(external, "destination"),
+                                opts.path,
+                                config.getlist(external, "exclude")):
+            print(f"External update of {external} failed!")
+            return 1
 
     # Create the SSH client
+    printer_pass = getpass.getpass("Printer access password: ")
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     try:
