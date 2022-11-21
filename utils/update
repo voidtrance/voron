@@ -24,7 +24,7 @@ except ImportError:
 SCRIPT_PATH = pathlib.PosixPath(os.path.dirname(sys.argv[0])).absolute()
 REPO_TOP = SCRIPT_PATH.parent
 REMOTE_CONF_PATH = pathlib.PosixPath("klipper_config")
-LOCAL_CONF_PATH = REPO_TOP / "printer" / "config"
+LOCAL_CONF_PATH = pathlib.PosixPath("printer") / "config"
 DEFAULT_CONFIG = SCRIPT_PATH / "update.conf"
 
 
@@ -55,9 +55,32 @@ ADD_COLOR = GColor.RGB(0, 255, 0)
 class PrinterConfig:
     def __init__(self, connection, remote_root, local_root):
         self.connection = connection
+        # This is a hack.
+        # There is no way to get the user's home directory
+        # through an SFTPClient connection. Furthermore, the
+        # Paramiko SFTPClient implementation does not recognize
+        # the tilde (~) shortchut. Therefoore, we cheat by
+        # assuming that a login shell will place us in the
+        # user's home directory. And since we don't chdir(),
+        # that should remain true for other intances of this
+        # class.
+        home_dir = pathlib.PosixPath(self.connection.normalize("."))
+        first_is_tilde = False
+        if isinstance(remote_root, pathlib.Path):
+            if remote_root.parts[0] == "~":
+                remote_root = home_dir / remote_root.relative_to("~")
+        else:
+            if remote_root.startswith("~/"):
+                remote_root = home_dir / remote_root[2:]
         self.remote_root = pathlib.PosixPath(remote_root)
         self.local_root = pathlib.PosixPath(local_root)
         self.filters = []
+        self.file_filters = []
+
+    def set_file_list(self, filters):
+        if not isinstance(filters, list):
+            filters = [filters]
+        self.file_filters = filters
 
     def set_file_filters(self, filters):
         if not isinstance(filters, list):
@@ -65,14 +88,20 @@ class PrinterConfig:
         self.filters += filters
 
     def filter_files(self, fileset):
-        for filter in self.filters:
-            matches = [name for name in fileset
-                       if fnmatch.fnmatch(name, filter)]
-            for match in matches:
-                fileset.remove(match)
+        if self.file_filters:
+            for filename in fileset:
+                if [filename for filter in self.file_filters
+                        if fnmatch.fnmatch(filename, filter)]:
+                    yield filename
+        else:
+            for filter in self.filters:
+                matches = [name for name in fileset
+                           if fnmatch.fnmatch(name, filter)]
+                for match in matches:
+                    fileset.remove(match)
 
-        for filename in fileset:
-            yield filename
+            for filename in fileset:
+                yield filename
 
     def __get_remote_files_func(self, root, filtered):
         filenames = self.connection.listdir(root.as_posix())
@@ -118,13 +147,17 @@ class PrinterConfig:
             local_dir = local_root / filename
         else:
             local_dir = local_root / filename.parent
-        local_dir.mkdir(exist_ok=True)
+        local_dir.mkdir(parents=True, exist_ok=True)
         # print(
         #    f"Downloading {self.remote_root / filename} to {local_root / filename}")
         self.connection.get((self.remote_root / filename).as_posix(),
                             (local_root / filename).as_posix())
 
-    def upload_file(self, filename):
+    def upload_file(self, filename, src=None):
+        if not src:
+            src = self.local_root / filename
+        if not src.is_absolute():
+            src = self.local_root / src
         remote_dir = self.remote_root / filename.parent
         try:
             st = self.connection.stat(remote_dir.as_posix())
@@ -136,7 +169,7 @@ class PrinterConfig:
                     continue
                 self.connection.mkdir(
                     self.remote_root / remote_dir.parents[pindex].as_posix())
-        self.connection.put((self.local_root / filename).as_posix(),
+        self.connection.put(src.as_posix(),
                             (self.remote_root / filename).as_posix())
 
     def remove_file(self, filename, remove_empty_dirs=False):
@@ -172,25 +205,6 @@ def compare_files(file1, file2):
     return difflib.unified_diff(content1, content2, str(file1), str(file2))
 
 
-def pull_config(config, opts, tempdir):
-    if not os.path.exists(opts.path):
-        os.makedirs(opts.path)
-    files = config.get_remote_files(True)
-    for filename in files:
-        config.download_file(filename)
-    return 0
-
-
-def push_config(config, opts, tempdir):
-    files = config.get_local_files(True)
-    for filename in files:
-        config.upload_file(filename)
-    if opts.restart:
-        printer = moonraker.Connection(opts.printer)
-        printer.firmware_restart()
-    return 0
-
-
 def show_diff(diff):
     for line in diff:
         if line[-1] != "\n":
@@ -205,60 +219,86 @@ def show_diff(diff):
             print(f"   {line}", end="")
 
 
-def compare_config(config, opts, tempdir):
-    remote_files = config.get_remote_files(True)
-    for filename in remote_files:
-        config.download_file(filename, tempdir)
-    file_set = set(config.get_local_files(True)) | set(
-        config.get_remote_files(True))
-    for filename in file_set:
-        result = compare_files(tempdir / filename, opts.path / filename)
-        if result:
-            print(f"{TITLE_COLOR}{filename}{GColor.END} differs:")
-            show_diff(result)
-    return 0
+def user_input(prompt, options=None, default=None):
+    if options:
+        if default and default not in options:
+            default = None
+        __options = []
+        if isinstance(options, dict):
+            __selection = options.keys()
+            for option in options:
+                prompt += f"\n   {option.capitalize()} - {options[option]}"
+            prompt += "\n"
+        else:
+            __selection = options
+        for option in __selection:
+            option = option.capitalize()
+            __options.append(f"({option})" if option == default else option)
+        prompt += f" [{'/'.join(__options)}]"
+    while True:
+        response = input(f"{prompt} ")
+        if not response and default:
+            return default
+        response = [x for x in options if x.lower() == response.lower()]
+        if response:
+            return response[0]
 
 
-def update_config(config, opts, tempdir):
-    files_updated = False
-    remote_files = config.get_remote_files(True)
-    for filename in remote_files:
-        config.download_file(filename, tempdir)
-    local_files = set(config.get_local_files(True))
-    remote_files = set(config.get_remote_files(True))
-    for filename in local_files:
-        diff = compare_files(tempdir / filename, opts.path / filename)
-        if diff:
-            answer = "y"
-            if opts.ask:
-                while True:
-                    answer = input(f"Upload {filename}? [y/n/d] ").lower()
-                    if answer == "d":
-                        show_diff(diff)
-                    if answer in ("y", "n"):
-                        break
-            if answer == "y":
-                print(f"Updating {filename}...")
-                config.upload_file(filename)
-                files_updated = True
-        if filename in remote_files:
-            remote_files.remove(filename)
-    for filename in remote_files - local_files:
-        answer = "y"
-        if opts.ask:
-            while True:
-                answer = input(
-                    f"File {filename} on printer but not local. Remove? [y/n] ").lower()
-                if answer in ("y", "n"):
-                    break
-        if answer == "y":
-            print(f"Removing {filename}...")
-            config.remove_file(filename)
-            files_updated = True
-    if opts.restart and files_updated:
-        printer = moonraker.Connection(opts.printer)
-        printer.firmware_restart()
-    return 0
+def split_diff(diff):
+    from_file, to_file, hunk, hunks = None, None, [], []
+    for line in diff:
+        if line[-1] != "\n":
+            line += "\n"
+        if line.startswith("---"):
+            from_file = pathlib.PosixPath(line.strip()[4:])
+        elif line.startswith("+++"):
+            to_file = pathlib.PosixPath(line.strip()[4:])
+        elif line.startswith("@@"):
+            if hunk:
+                hunks.append(hunk)
+            hunk = [line]
+        else:
+            hunk.append(line)
+    else:
+        hunks.append(hunk)
+    from_parts = list(from_file.parts)
+    from_parts.reverse()
+    to_parts = list(to_file.parts)
+    to_parts.reverse()
+    for i in range(min(len(from_parts), len(to_parts))):
+        if from_parts[i] != to_parts[i]:
+            break
+    if i:
+        from_file = from_file.relative_to(from_file.parents[i-1])
+        to_file = to_file.relative_to(to_file.parents[i-1])
+    else:
+        from_file = from_file.name
+        to_file = to_file.name
+    return from_file, to_file, hunks
+
+
+def apply_patch(src, dst, path, diff, reversed=False):
+    import subprocess
+
+    cmd = ["patch", "-p1"]
+    if reversed:
+        cmd.append("-R")
+    proc = subprocess.Popen(cmd, cwd=path, text=True,
+                            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT)
+    print(f"--- a/{src}")
+    print(f"+++ b/{dst}")
+    for line in diff:
+        print(line, end="")
+    proc.stdin.write(f"--- a/{src}\n")
+    proc.stdin.write(f"+++ b/{dst}\n")
+    proc.stdin.writelines(diff)
+    proc.stdin.close()
+    status = proc.wait()
+    if status != 0:
+        for line in proc.stdout.readlines():
+            print(line, end="")
+    return status
 
 
 def clean_temp_dir(path):
@@ -277,8 +317,10 @@ def config_parser_list_converter(value):
 
 def update_from_external(src, dest, path, excludes):
     src = REPO_TOP / src
+    if not path:
+        path = REPO_TOP / LOCAL_CONF_PATH
     dest = pathlib.PosixPath(path) / \
-        (REPO_TOP / dest).relative_to(LOCAL_CONF_PATH)
+        (REPO_TOP / dest).relative_to(REPO_TOP / LOCAL_CONF_PATH)
     if not src.exists():
         print(f"External source ({src}) not found.")
         return -1
@@ -306,6 +348,175 @@ def update_from_external(src, dest, path, excludes):
     return 0
 
 
+def compare_printer_config(printer, tempdir):
+    remote_files = printer.get_remote_files()
+    for filename in remote_files:
+        printer.download_file(filename, tempdir)
+    file_set = set(printer.get_local_files()) | \
+        set(printer.get_remote_files())
+    for filename in file_set:
+        result = compare_files(
+            tempdir / filename, printer.local_root / filename)
+        if result:
+            print(f"{TITLE_COLOR}{filename}{GColor.END} differs:")
+            show_diff(result)
+    return 0
+
+
+def compare_config(conn, config, opts, tempdir):
+    printer = PrinterConfig(conn, REMOTE_CONF_PATH,
+                            opts.path or (REPO_TOP / LOCAL_CONF_PATH))
+    printer.set_file_filters(opts.exclude)
+    status = compare_printer_config(printer, tempdir)
+    if status:
+        return status
+    for extra in config.getlist("global", "extras"):
+        if extra not in config:
+            print(f"Section '{extra}' missing from config")
+            continue
+        printer = PrinterConfig(conn,
+                                config.get(extra, "destination"),
+                                opts.path or (REPO_TOP / config.get(extra,
+                                                                    "source")))
+        printer.set_file_list(config.getlist(extra, "files"))
+        status = compare_printer_config(printer, tempdir)
+        if status:
+            break
+    return status
+
+
+def pull_config(conn, config, opts, tempdir):
+    if not os.path.exists(opts.path):
+        os.makedirs(opts.path)
+    printer = PrinterConfig(conn, REMOTE_CONF_PATH,
+                            opts.path or (REPO_TOP / LOCAL_CONF_PATH))
+    printer.set_file_filters(opts.exclude)
+    files = printer.get_remote_files()
+    for filename in files:
+        printer.download_file(filename)
+    for extra in config.getlist("global", "extras"):
+        if extra not in config:
+            print(f"Section '{extra}' missing from config")
+            continue
+        printer = PrinterConfig(conn,
+                                config.get(extra, "destination"),
+                                opts.path or (REPO_TOP / config.get(extra,
+                                                                    "source")))
+        printer.set_file_list(config.getlist(extra, "files"))
+        files = printer.get_remote_files()
+        for filename in files:
+            printer.download_file(filename)
+    return 0
+
+
+def push_config(conn, config, opts, tempdir):
+    if opts.update_external:
+        for external in config.getlist("global", "external"):
+            if external not in config:
+                print(f"Section '{external}' missing from config.")
+                continue
+            print(f"Update from external source: {external}...")
+            if update_from_external(config.get(external, "source"),
+                                    config.get(external, "destination"),
+                                    opts.path,
+                                    config.getlist(external, "exclude")):
+                print(f"External update of {external} failed!")
+                return 1
+
+    printer = PrinterConfig(conn, REMOTE_CONF_PATH,
+                            opts.path or (REPO_TOP / LOCAL_CONF_PATH))
+    printer.set_file_filters(opts.exclude)
+    files = printer.get_local_files()
+    for filename in files:
+        printer.upload_file(filename)
+    for extra in config.getlist("global", "extras"):
+        if extra not in config:
+            print(f"Section '{extra}' missing from config")
+            continue
+        printer = PrinterConfig(conn,
+                                config.get(extra, "destination"),
+                                opts.path or (REPO_TOP / config.get(extra,
+                                                                    "source")))
+        printer.set_file_list(config.getlist(extra, "files"))
+        files = printer.get_local_files()
+        for filename in files:
+            printer.upload_file(filename)
+    if opts.restart:
+        printer = moonraker.Connection(opts.printer)
+        printer.firmware_restart()
+    return 0
+
+
+def update_printer_config(printer, tempdir, ask):
+    files_updated = False
+    local_files = set(printer.get_local_files(True))
+    remote_files = set(printer.get_remote_files(True))
+    for filename in remote_files:
+        printer.download_file(filename, tempdir)
+    for filename in local_files:
+        diff = compare_files(tempdir / filename, printer.local_root / filename)
+        if diff:
+            answer = "y"
+            if ask:
+                while True:
+                    answer = user_input(f"Upload {filename}?", ["y", "n", "d"])
+                    if answer == "d":
+                        show_diff(diff)
+                    else:
+                        break
+            if answer == "y":
+                print(f"Updating {filename}...")
+                printer.upload_file(filename)
+                files_updated = True
+        if filename in remote_files:
+            remote_files.remove(filename)
+    for filename in remote_files - local_files:
+        answer = "y"
+        if ask:
+            answer = user_input(f"File {filename} on printer but not local. Remove?",
+                                ["y", "n"])
+        if answer == "y":
+            print(f"Removing {filename}...")
+            printer.remove_file(filename)
+            files_updated = True
+    return files_updated
+
+
+def update_config(conn, config, opts, tempdir):
+    if opts.update_external:
+        for external in config.getlist("global", "external"):
+            if external not in config:
+                print(f"Section '{external}' missing from config.")
+                continue
+            print(f"Update from external source: {external}...")
+            if update_from_external(config.get(external, "source"),
+                                    config.get(external, "destination"),
+                                    opts.path,
+                                    config.getlist(external, "exclude")):
+                print(f"External update of {external} failed!")
+                return 1
+
+    printer = PrinterConfig(conn, REMOTE_CONF_PATH,
+                            opts.path or (REPO_TOP / LOCAL_CONF_PATH))
+    printer.set_file_filters(opts.exclude)
+    files_updated = update_printer_config(printer, tempdir, opts.ask)
+    for extra in config.getlist("global", "extras"):
+        if extra not in config:
+            print(f"Section '{extra}' missing from config")
+            continue
+        printer = PrinterConfig(conn,
+                                config.get(extra, "destination"),
+                                opts.path or (REPO_TOP / config.get(extra,
+                                                                    "source")))
+        printer.set_file_list(config.getlist(extra, "files"))
+        files_updated = files_updated or \
+            update_printer_config(printer, tempdir, opts.ask)
+    if opts.restart and files_updated:
+        printer = moonraker.Connection(opts.printer)
+        printer.firmware_restart()
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(sys.argv[0],
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -317,7 +528,7 @@ def main():
     pull_parser = subparser.add_parser("pull",
                                        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
                                        help="Download configuration files.")
-    pull_parser.add_argument("--path", type=str, default=LOCAL_CONF_PATH,
+    pull_parser.add_argument("--path", type=str, default=None,
                              help="Directory where configuration files will be stored.")
     pull_parser.add_argument("printer", type=str,
                              help="Printer name/address.")
@@ -325,7 +536,7 @@ def main():
     push_parser = subparser.add_parser("push",
                                        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
                                        help="Upload local configuration to printer.")
-    push_parser.add_argument("--path", type=str, default=LOCAL_CONF_PATH,
+    push_parser.add_argument("--path", type=str, default=None,
                              help="Configuration file source directory")
     push_parser.add_argument("--restart", action="store_true",
                              help="Restart firmare after config push.")
@@ -335,20 +546,23 @@ def main():
     compare_parser = subparser.add_parser("compare",
                                           formatter_class=argparse.ArgumentDefaultsHelpFormatter,
                                           help="Compare configuration files.")
-    compare_parser.add_argument("--path", type=str, default=LOCAL_CONF_PATH,
+    compare_parser.add_argument("--path", type=str, default=None,
                                 help="Configuration file source directory")
     compare_parser.add_argument("printer", type=str,
                                 help="Printer name/address.")
     compare_parser.set_defaults(handler=compare_config)
     update_parser = subparser.add_parser("update",
                                          formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-                                         help="Update printer configuration.")
-    update_parser.add_argument("--path", type=str, default=LOCAL_CONF_PATH,
+                                         help="""Update printer configuration. This (selectively)
+                                         pushes local files to the printer.""")
+    update_parser.add_argument("--path", type=str, default=None,
                                help="Configuration files source directory.")
     update_parser.add_argument("--ask", action="store_true",
                                help="Ask for confirmation before update file.")
     update_parser.add_argument("--restart", action="store_true",
                                help="Restart firmware after config update.")
+    update_parser.add_argument("--update-external", action="store_true",
+                               help="Do update from external sources.")
     update_parser.add_argument("printer", type=str,
                                help="Printer name/address.")
     update_parser.set_defaults(handler=update_config)
@@ -369,20 +583,6 @@ def main():
                                                  dir="/tmp"))
     tempdir.mkdir(parents=True, exist_ok=True)
 
-    # First, sync all files from external locations to
-    # the local paths.
-    for external in config.getlist("global", "external"):
-        if external not in config:
-            print(f"Section '{external}' missing from config.")
-            return 1
-        print(f"Update from external source: {external}...")
-        if update_from_external(config.get(external, "source"),
-                                config.get(external, "destination"),
-                                opts.path,
-                                config.getlist(external, "exclude")):
-            print(f"External update of {external} failed!")
-            return 1
-
     # Create the SSH client
     printer_pass = getpass.getpass("Printer access password: ")
     client = paramiko.SSHClient()
@@ -392,16 +592,12 @@ def main():
                        password=printer_pass, allow_agent=False)
     except Exception as err:
         print(f"SSH Connect: {err}")
-        sys.exit(1)
+        return 1
 
     # Open a SFTP connection. This will be the connection that will
     # be used for all transfers
     sftp = client.open_sftp()
-
-    config = PrinterConfig(sftp, REMOTE_CONF_PATH, opts.path)
-    config.set_file_filters(opts.exclude)
-    status = opts.handler(config, opts, tempdir)
-
+    status = opts.handler(sftp, config, opts, tempdir)
     client.close()
     clean_temp_dir(tempdir)
     return status
