@@ -172,6 +172,9 @@ def main():
     opts = arg_parser.parse_args(sys.argv[1:])
     opts = parse_params(opts)
 
+    if not opts.file or not os.access(opts.file, os.R_OK):
+        return EXIT_ERROR
+
     objects = get_printed_objects(opts.file)
     if not objects:
         return EXIT_ERROR
