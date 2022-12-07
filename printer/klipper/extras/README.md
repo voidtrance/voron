@@ -124,3 +124,41 @@ can be used to alter the amount by which each step in the transition will change
 * While the extension manipulates the LEDs Klipper objects directly, bypassing
   any GCode, it may still interfere with normal command processing if the LEDs
   are connected to the MCU controlling the printing operations.
+
+## Idle Timeout
+The `idle_timeout` module that Klipper includes can be used to execute GCode when a predefined number of
+seconds have elapsed without any activity. When the time elapses, the printer is put into an "Idle" state.
+
+It would be nice to be able to also execute GCode when the printer comes out of the "Idle" state. This can
+be used to turn auxiliary hardware (like the LCD) on and off. Some users have opted to add such GCode to
+their `PRINT_START` macros since it is pretty much the first thing that is executed in normal operations.
+I, however, wanted to have the functionality somewhat more integrated into Klipper in order to be able to
+catch activity that does not trigger `PRINT_START`. For example, using the frontend interfaces, the printer
+can be brought out of the "Idle" state by a number of actions.
+
+While at it, I also modified the `idle_timeout` modules to not only allow for execution of GCode when the
+printer comes out of "Idle" state but also when the printer is first started.
+
+### Installation
+1. Copy _idle_timeout.py_ over the existing file in _klipper/klippy/extras_.
+2. Copy _display/menu_keys.py_ ove the existing file in _klipper/klippy/extras/display_.
+3. Restart Klipper.
+
+### Setup
+```gcode
+[idle_timeout]
+#startup_gcode:
+#   A list of G-Code commands to execute when Klipper enters "ready"
+#   state, which happens on initial startup. These commands will be
+#   executed only once.
+#ready_gcode:
+#    A list of G-Code commands to execute when the printer exits the
+#    the "Idle" state.
+#idle_gcode:
+#   A list of G-Code commands to execute on an idle timeout. See
+#   docs/Command_Templates.md for G-Code format. The default is to run
+#   "TURN_OFF_HEATERS" and "M84".
+#timeout: 600
+#   Idle time (in seconds) to wait before running the above G-Code
+#   commands. The default is 600 seconds.
+```
