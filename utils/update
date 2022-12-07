@@ -80,16 +80,25 @@ class PrinterConfig:
     def set_file_list(self, filters):
         if not isinstance(filters, list):
             filters = [filters]
-        self.file_filters = filters
+        for filter in filters:
+            if not os.path.isabs(filter):
+                filter = "*/" + filter
+            self.file_filters.append(filter)
 
     def set_file_filters(self, filters):
         if not isinstance(filters, list):
             filters = [filters]
-        self.filters += filters
+        for filter in filters:
+            if not os.path.isabs(filter):
+                filter = "*/" + filter
+            self.filters.append(filter)
 
     def filter_files(self, fileset):
         if self.file_filters:
             for filename in fileset:
+                # for filter in self.file_filters:
+                #    print(filename, filter, fnmatch.fnmatch(
+                #        filename, filter))
                 if [filename for filter in self.file_filters
                         if fnmatch.fnmatch(filename, filter)]:
                     yield filename
@@ -103,39 +112,35 @@ class PrinterConfig:
             for filename in fileset:
                 yield filename
 
-    def __get_remote_files_func(self, root, filtered):
+    def __get_remote_files_func(self, root):
         filenames = self.connection.listdir(root.as_posix())
-        if filtered:
-            filenames = [pathlib.PosixPath(x)
-                         for x in self.filter_files(filenames)]
         remote_files = []
         for filename in filenames:
             st = self.connection.stat((root / filename).as_posix())
             if stat.S_ISDIR(st.st_mode):
-                remote_files += self.__get_remote_files_func(
-                    root / filename, filtered)
+                remote_files += \
+                    self.__get_remote_files_func(root / filename)
             else:
                 remote_files.append(root / filename)
         return remote_files
 
-    def __get_local_files_func(self, root, filtered):
+    def __get_local_files_func(self, root):
         filenames = []
         for root, dirs, files in os.walk(root):
             root = pathlib.PosixPath(root)
-            if filtered:
-                filenames += [root / x for x in self.filter_files(files)]
-            else:
-                filenames = [root / x for x in files]
-            for d in dirs:
-                filenames += self.__get_local_files_func(root / d, filtered)
+            filenames += [root / x for x in files]
         return filenames
 
     def get_remote_files(self, filtered=True):
-        files = self.__get_remote_files_func(self.remote_root, filtered)
+        files = self.__get_remote_files_func(self.remote_root)
+        if filtered:
+            files = list(self.filter_files(files))
         return [x.relative_to(self.remote_root) for x in files]
 
     def get_local_files(self, filtered=True):
-        files = self.__get_local_files_func(self.local_root, filtered)
+        files = self.__get_local_files_func(self.local_root)
+        if filtered:
+            files = list(self.filter_files(files))
         return [x.relative_to(self.local_root) for x in files]
 
     def download_file(self, filename, local_root=None):
