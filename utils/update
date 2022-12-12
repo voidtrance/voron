@@ -514,8 +514,111 @@ def update_config(conn, config, opts, tempdir):
                                 opts.path or (REPO_TOP / config.get(extra,
                                                                     "source")))
         printer.set_file_list(config.getlist(extra, "files"))
-        files_updated = files_updated or \
-            update_printer_config(printer, tempdir, opts.ask)
+        files_updated |= update_printer_config(printer, tempdir, opts.ask)
+    if opts.restart and files_updated:
+        printer = moonraker.Connection(opts.printer)
+        printer.firmware_restart()
+    return 0
+
+
+def sync_printer_config(printer, tempdir):
+    files_updated = 0
+    local_files = set(printer.get_local_files(True))
+    remote_files = set(printer.get_remote_files(True))
+    for filename in remote_files:
+        try:
+            printer.download_file(filename, tempdir)
+        except:
+            print(remote_files, filename, tempdir)
+    for filename in local_files:
+        if filename not in remote_files:
+            response = user_input(f"Local file {FILENAME_COLOR}{filename}{GColor.END} not on printer. Upload it?",
+                                  ["y", "n"], "y")
+            if response == "y":
+                printer.upload_file(filename)
+                files_updated += 1
+            continue
+        else:
+            remote_files.remove(filename)
+        diff = compare_files(tempdir / filename, printer.local_root / filename)
+        if not diff:
+            continue
+
+        # Turn the diff generator into a list since generators can't be
+        # reset
+        diff = list(diff)
+        show_diff(diff)
+        response = user_input(f"File {FILENAME_COLOR}{filename}{GColor.END} differs.",
+                              {"u": "Upload local file.",
+                               "d": "Download remote file.",
+                               "s": "Skip this file.",
+                               "p": "Select individual changes to apply.",
+                               "q": "Quit"})
+        if response == "u":
+            printer.upload_file(filename)
+        elif response == "d":
+            printer.download_file(filename, REPO_TOP / LOCAL_CONF_PATH)
+        elif response == "s":
+            continue
+        elif response == "q":
+            return files_updated
+        elif response == "p":
+            local_patch_content = []
+            remote_patch_content = []
+            ffile, tfile, hunks = split_diff(diff)
+            for hunk in hunks:
+                hunk_diff = [f"--- {ffile}", f"+++ {tfile}"] + hunk
+                show_diff(hunk_diff)
+                response = user_input("Apply hunk?",
+                                      {"l": "Apply to local file",
+                                       "r": "Apply to remote file",
+                                       "n": "Don't apply"})
+                if response == "l":
+                    for line in hunk:
+                        local_patch_content.append(line)
+                elif response == "r":
+                    for line in hunk:
+                        remote_patch_content.append(line)
+            if local_patch_content:
+                if apply_patch(ffile, tfile, printer.local_root,
+                               local_patch_content, True):
+                    return files_updated
+            if remote_patch_content:
+                if apply_patch(ffile, tfile, tempdir, remote_patch_content):
+                    return files_updated
+                printer.upload_file(filename, ffile)
+                files_updated += 1
+    return files_updated
+
+
+def sync_config(conn, config, opts, tempdir):
+    if opts.update_external:
+        for external in config.getlist("global", "external"):
+            if external not in config:
+                print(f"Section '{external}' missing from config.")
+                continue
+            print(f"Update from external source: {external}...")
+            if update_from_external(config.get(external, "source"),
+                                    config.get(external, "destination"),
+                                    opts.path,
+                                    config.getlist(external, "exclude")):
+                print(f"External update of {external} failed!")
+                return 1
+
+    printer = PrinterConfig(conn, REMOTE_CONF_PATH,
+                            opts.path or (REPO_TOP / LOCAL_CONF_PATH))
+    printer.set_file_filters(opts.exclude)
+    files_updated = sync_printer_config(printer, tempdir, opts.ask)
+    for extra in config.getlist("global", "extras"):
+        if extra not in config:
+            print(f"Section '{extra}' missing from config")
+            continue
+        printer = PrinterConfig(conn,
+                                config.get(extra, "destination"),
+                                opts.path or (REPO_TOP / config.get(extra,
+                                                                    "source")))
+        printer.set_file_list(config.getlist(extra, "files"))
+        files_updated += sync_printer_config(printer, tempdir, opts.ask)
     if opts.restart and files_updated:
         printer = moonraker.Connection(opts.printer)
         printer.firmware_restart()
@@ -571,6 +674,18 @@ def main():
     update_parser.add_argument("printer", type=str,
                                help="Printer name/address.")
     update_parser.set_defaults(handler=update_config)
+    sync_parser = subparser.add_parser("sync",
+                                       formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+                                       help="""Synchronize printer configuration.
+                                       Unlike 'update' this option allows for differences
+                                       in configuration to be applied in both directions.""")
+    sync_parser.add_argument("--path", type=str, default=None,
+                             help="Configuration files source directory.")
+    sync_parser.add_argument("--update-external", action="store_true",
+                             help="Do update from external sources.")
+    sync_parser.add_argument("printer", type=str,
+                             help="Printer name/address")
+    sync_parser.set_defaults(handler=sync_config)
     opts = parser.parse_args(sys.argv[1:])
 
     config = configparser.ConfigParser(
