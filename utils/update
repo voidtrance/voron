@@ -320,6 +320,11 @@ def config_parser_list_converter(value):
     return [x for x in value.split("\n") if x]
 
 
+def restart_printer(name):
+    printer = moonraker.Connection(name)
+    printer.firmware_restart()
+
+
 def update_from_external(src, dest, path, excludes):
     src = REPO_TOP / src
     if not path:
@@ -447,8 +452,7 @@ def push_config(conn, config, opts, tempdir):
         for filename in files:
             printer.upload_file(filename)
     if opts.restart:
-        printer = moonraker.Connection(opts.printer)
-        printer.firmware_restart()
+        restart_printer(opts.printer)
     return 0
 
 
@@ -516,8 +520,7 @@ def update_config(conn, config, opts, tempdir):
         printer.set_file_list(config.getlist(extra, "files"))
         files_updated |= update_printer_config(printer, tempdir, opts.ask)
     if opts.restart and files_updated:
-        printer = moonraker.Connection(opts.printer)
-        printer.firmware_restart()
+        restart_printer(opts.printer)
     return 0
 
 
@@ -608,7 +611,7 @@ def sync_config(conn, config, opts, tempdir):
     printer = PrinterConfig(conn, REMOTE_CONF_PATH,
                             opts.path or (REPO_TOP / LOCAL_CONF_PATH))
     printer.set_file_filters(opts.exclude)
-    files_updated = sync_printer_config(printer, tempdir, opts.ask)
+    files_updated = sync_printer_config(printer, tempdir)
     for extra in config.getlist("global", "extras"):
         if extra not in config:
             print(f"Section '{extra}' missing from config")
@@ -618,10 +621,9 @@ def sync_config(conn, config, opts, tempdir):
                                 opts.path or (REPO_TOP / config.get(extra,
                                                                     "source")))
         printer.set_file_list(config.getlist(extra, "files"))
-        files_updated += sync_printer_config(printer, tempdir, opts.ask)
+        files_updated += sync_printer_config(printer, tempdir)
     if opts.restart and files_updated:
-        printer = moonraker.Connection(opts.printer)
-        printer.firmware_restart()
+        restart_printer(opts.printer)
     return 0
 
 
@@ -681,6 +683,8 @@ def main():
                                        in configuration to be applied in both directions.""")
     sync_parser.add_argument("--path", type=str, default=None,
                              help="Configuration files source directory.")
+    sync_parser.add_argument("--restart", action="store_true",
+                             help="Restart firmware after config update.")
     sync_parser.add_argument("--update-external", action="store_true",
                              help="Do update from external sources.")
     sync_parser.add_argument("printer", type=str,
