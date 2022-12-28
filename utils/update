@@ -634,35 +634,41 @@ def main():
                         help="Tool configuration file.")
     parser.add_argument("--exclude", action="append", default=[],
                         help="Exclude file patterns")
+    parser.add_argument("--username",
+                        help="""Username to use when connection to the printer.
+                        This value overrides any username specified in the
+                        config file.""")
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("printer", type=str, nargs="?", default=None,
+                        help="""Printer name/address. If not give, the printer
+                             name specified in the config file will be used.""")
     subparser = parser.add_subparsers(title="Operation Modes")
     pull_parser = subparser.add_parser("pull",
                                        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+                                       parents=[common],
                                        help="Download configuration files.")
     pull_parser.add_argument("--path", type=str, default=None,
                              help="Directory where configuration files will be stored.")
-    pull_parser.add_argument("printer", type=str,
-                             help="Printer name/address.")
     pull_parser.set_defaults(handler=pull_config)
     push_parser = subparser.add_parser("push",
                                        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+                                       parents=[common],
                                        help="Upload local configuration to printer.")
     push_parser.add_argument("--path", type=str, default=None,
                              help="Configuration file source directory")
     push_parser.add_argument("--restart", action="store_true",
                              help="Restart firmare after config push.")
-    push_parser.add_argument("printer", type=str,
-                             help="Printer name/address.")
     push_parser.set_defaults(handler=push_config)
     compare_parser = subparser.add_parser("compare",
                                           formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+                                          parents=[common],
                                           help="Compare configuration files.")
     compare_parser.add_argument("--path", type=str, default=None,
                                 help="Configuration file source directory")
-    compare_parser.add_argument("printer", type=str,
-                                help="Printer name/address.")
     compare_parser.set_defaults(handler=compare_config)
     update_parser = subparser.add_parser("update",
                                          formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+                                         parents=[common],
                                          help="""Update printer configuration. This (selectively)
                                          pushes local files to the printer.""")
     update_parser.add_argument("--path", type=str, default=None,
@@ -673,11 +679,10 @@ def main():
                                help="Restart firmware after config update.")
     update_parser.add_argument("--update-external", action="store_true",
                                help="Do update from external sources.")
-    update_parser.add_argument("printer", type=str,
-                               help="Printer name/address.")
     update_parser.set_defaults(handler=update_config)
     sync_parser = subparser.add_parser("sync",
                                        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+                                       parents=[common],
                                        help="""Synchronize printer configuration.
                                        Unlike 'update' this option allows for differences
                                        in configuration to be applied in both directions.""")
@@ -687,8 +692,6 @@ def main():
                              help="Restart firmware after config update.")
     sync_parser.add_argument("--update-external", action="store_true",
                              help="Do update from external sources.")
-    sync_parser.add_argument("printer", type=str,
-                             help="Printer name/address")
     sync_parser.set_defaults(handler=sync_config)
     opts = parser.parse_args(sys.argv[1:])
 
@@ -700,6 +703,18 @@ def main():
         print("'global' section missing from configuration!")
         return 1
 
+    opts.printer = opts.printer or config.get("global", "printer",
+                                              fallback=None)
+    if not opts.printer:
+        print("Printer name must be provided!")
+        return 1
+
+    opts.username = opts.username or config.get("global", "username",
+                                                fallback=None)
+    if not opts.username:
+        print("Printer username must be provided!")
+        return 1
+
     for exclude in config.getlist("global", "exclude"):
         opts.exclude.append(exclude)
 
@@ -708,11 +723,17 @@ def main():
     tempdir.mkdir(parents=True, exist_ok=True)
 
     # Create the SSH client
-    printer_pass = getpass.getpass("Printer access password: ")
+    try:
+        printer_pass = getpass.getpass(
+            f"Printer '{opts.printer}' access password: ")
+    except KeyboardInterrupt:
+        print()
+        return 0
+
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     try:
-        client.connect(opts.printer, username="pi",
+        client.connect(opts.printer, username=opts.username,
                        password=printer_pass, allow_agent=False)
     except Exception as err:
         print(f"SSH Connect: {err}")
