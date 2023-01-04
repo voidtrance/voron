@@ -41,11 +41,11 @@ gcode:
 ```
 
 `<MACRO_NAME>` can be any name that you want. Valid characters are alphanumerics and underscore.
-Usually, the macro name is written in all caps but that's required. Numbers can only appear at
-the end of the macro names. Macro names that start with underscore ('_') are "hidden". They are
-still defined and callable but are not shown in frontends like Mainsail or Fluidd.
+Usually, the macro name is written in all caps but that's not required. Numbers can only appear
+at the end of the macro names. Macro names that start with underscore ('_') are "hidden". They
+are still defined and callable but are not shown in frontends like Mainsail or Fluidd.
 
-Macros are called/triggered either from the frontend or from other macros. To trigger a macro
+Macros are called/triggered either from a frontend or from other macros. To trigger a macro
 from another macro call it at the appropriate time. For example:
 
 ```gcode
@@ -68,10 +68,21 @@ Macro variables (the `variable_<name>` key/value pair) are persistent variables 
 macro. Their values can be used/set within the macro or even from another macro. You can think
 of them as macro-specific global variables.
 
+```gcode
+[gcode_macro MACRO3]
+variable_var1: 0
+gcode:
+```
+
+The example above defines a macro variable `var1` with an initial value of `0`. This value will
+be assigned to the variable when Klipper starts up and initializes all macro objects. If the
+value of the variable is changed at a later time, the new value will persist until changed
+again.
+
 Variables defined by a macro can be referenced from within the macro directly:
 
 ```gcode
-[gcode_macro MACRO2]
+[gcode_macro MACRO4]
 variable_var1: 0
 gcode:
     M117 Var1 is equal to {var1}
@@ -81,7 +92,7 @@ Referencing macro variables from a different macro requires the look up of the m
 defines the desired variables:
 
 ```gcode
-[gcode_macro MACRO3]
+[gcode_macro MACRO5]
 gcode:
     {% set macro2 = printer["gcode_macro MACRO2"] %}
     M117 Var1 from MACRO2 is set to {macro2.var1}
@@ -90,13 +101,34 @@ gcode:
 Changing variable values at runtime is done with the `SET_GCODE_VARIABLE` command:
 
 ```gcode
-[gcode_macro MACRO4]
+[gcode_macro MACRO6]
 gcode:
     SET_GCODE_VARIABLE MACRO=MACRO2 VARIABLE=var1 VALUE=10
 ```
 
 Please note that the `SET_GCODE_VARIABLE` command has to be used regardless if the variable is
 being changed from the defining macro or another one.
+
+### User Macro Settings
+Because Klipper allows the definition of an "empty" macro - a macro that does not contain any
+GCode commands, a macro can be created that is just a common storage for various settings/values:
+
+```gcode
+[gcode_macro _USER_VARIABLES]
+variable_var1: 0
+variable_var2: 1
+gcode:
+
+[gcode_macro MACRO7]
+gcode:
+    {% set user_vars = printer["gcode_macro _USER_VARIABLES"] %}
+    M117 Variable 1: {user_vars.var1}
+    M117 Variable 2: {user_vars.var2}
+```
+In the above example, a hidden macro called `_USER_VARIABLES` is created, which is used just to
+hold variables. Then, other macros can reference it to use and/or set variables values.
+
+This is a common usage pattern for many configurations in the Voron community, for example.
 
 ## Organizing Configuration Files
 Macros are generally placed in configuration files - files with the `.cfg` extension located in
@@ -336,7 +368,8 @@ scheduled.
 
 ### Passing Parameters to Delayed GCode
 While it is not possible to pass variables and/or parameters to delayed GCode macros directly, there
-is an indirect way to do this - by using variables defined by another macro:
+is an indirect way to do this - by using variables defined by another macro (see 
+[User Macro Settings](./README.md#user-macro-settings)):
 
 ```gcode
 [gcode_macro __PARAMETERS]
