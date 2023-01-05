@@ -21,6 +21,11 @@ except ImportError:
     print("This tool requires python3-paramiko.", file=sys.stderr)
     sys.exit(1)
 
+try:
+    import git
+except ImportError:
+    git = None
+
 SCRIPT_PATH = pathlib.PosixPath(os.path.dirname(sys.argv[0])).absolute()
 REPO_TOP = SCRIPT_PATH.parent
 REMOTE_CONF_PATH = pathlib.PosixPath("klipper_config")
@@ -325,7 +330,39 @@ def restart_printer(name):
     printer.firmware_restart()
 
 
-def update_from_external(src, dest, path, excludes):
+def verify_git_repo(path, branch):
+    if not git or not branch:
+        return True
+
+    repo_path = pathlib.PosixPath(path)
+    while repo_path.as_posix() != repo_path.root:
+        if (repo_path / ".git").exists():
+            break
+
+    if repo_path.as_posix() == repo_path.root:
+        return False
+
+    repo = git.Repo(repo_path)
+    if repo.active_branch.name == branch:
+        return True
+
+    # If the repo is not dirty, we can attempt to
+    # switch branches.
+    if repo.is_dirty():
+        return False
+
+    head = [x for x in repo.heads if x.name == branch]
+    if not head:
+        return False
+    try:
+        repo.head = head
+        repo.head.reset(index=True, working_tree=True)
+    except git.GitError:
+        return False
+    return True
+
+
+def update_from_external(src, branch, dest, path, excludes):
     src = REPO_TOP / src
     if not path:
         path = REPO_TOP / LOCAL_CONF_PATH
@@ -336,6 +373,9 @@ def update_from_external(src, dest, path, excludes):
         return -1
     if not dest.exists():
         print(f"External destination ({dest}) not found.")
+        return -1
+    if not verify_git_repo(src, branch):
+        print(f"External repo branch is not correct")
         return -1
     fileset = [x.relative_to(src) for x in src.iterdir()]
     for pattern in excludes:
@@ -427,6 +467,7 @@ def push_config(conn, config, opts, tempdir):
                 continue
             print(f"Update from external source: {external}...")
             if update_from_external(config.get(external, "source"),
+                                    config.get(external, "branch", None),
                                     config.get(external, "destination"),
                                     opts.path,
                                     config.getlist(external, "exclude")):
@@ -499,6 +540,7 @@ def update_config(conn, config, opts, tempdir):
                 continue
             print(f"Update from external source: {external}...")
             if update_from_external(config.get(external, "source"),
+                                    config.get(external, "branch", None),
                                     config.get(external, "destination"),
                                     opts.path,
                                     config.getlist(external, "exclude")):
@@ -602,6 +644,7 @@ def sync_config(conn, config, opts, tempdir):
                 continue
             print(f"Update from external source: {external}...")
             if update_from_external(config.get(external, "source"),
+                                    config.get(external, "branch", None),
                                     config.get(external, "destination"),
                                     opts.path,
                                     config.getlist(external, "exclude")):
