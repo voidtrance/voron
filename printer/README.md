@@ -30,6 +30,20 @@ Voron documentation.
 4. Compile and flash firmware: `make flash FLASH_DEVICE=<YourSerialFromTheConfigFiles>`
 5. Start klipper: `sudo service klipper start`
 
+### Flashing Octopus Bootloader
+To reflash the Octopus (STM32F446XX) bootloader, use the following steps:
+
+1. Disconnect all connections to the Octopus, except 24V and USB.
+2. Boot Octopus in DFU mode.
+3. Download bootloader:
+`wget https://raw.githubusercontent.com/bigtreetech/BIGTREETECH-OCTOPUS-V1.0/master/Firmware/DFU%20Update%20bootloader/bootloader/OctoPus-F446-bootloader-32KB.hex`
+4. Convert HEX bootloader firmware to binary:
+`objcopy --input-target=ihex --output-target=binary OctoPus-F446-bootloader-32KB.hex bootloader.bin`
+5. (Optional) Backup old bootloader:
+`sudo dfu-util -d ,0483:df11 -R -a 0 -s 0x8000000:32768 -U old-bootloader.bin`
+6. Flash new bootloader:
+`sudo dfu-util -d ,0483:df11 -R -a 0 -s 0x8000000:leave -D bootloader.bin`
+
 ## Tuning Guides
 - https://github.com/AndrewEllis93/Print-Tuning-Guide
 
