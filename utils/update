@@ -168,19 +168,20 @@ class PrinterConfig:
             src = self.local_root / filename
         if not src.is_absolute():
             src = self.local_root / src
-        remote_dir = self.remote_root / filename.parent
+        remote_path = self.remote_root / filename
         try:
-            st = self.connection.stat(remote_dir.as_posix())
+            st = self.connection.stat(remote_path.as_posix())
         except FileNotFoundError:
-            for pindex in range(len(remote_dir.parents)-1, -1, -1):
-                st = self.connection.stat(
-                    (self.remote_root / remote_dir.parents[pindex]).as_posix())
-                if stat.S_ISDIR(st.st_mode):
+            for pindex in range(len(remote_path.parents)-1, -1, -1):
+                path = remote_path.parents[pindex].as_posix()
+                try:
+                    st = self.connection.stat(path)
+                except FileNotFoundError:
+                    st = None
+                if st and stat.S_ISDIR(st.st_mode):
                     continue
-                self.connection.mkdir(
-                    self.remote_root / remote_dir.parents[pindex].as_posix())
-        self.connection.put(src.as_posix(),
-                            (self.remote_root / filename).as_posix())
+                self.connection.mkdir(path)
+        self.connection.put(src.as_posix(), remote_path.as_posix())
 
     def remove_file(self, filename, remove_empty_dirs=False):
         try:
