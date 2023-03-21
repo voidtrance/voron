@@ -1,5 +1,6 @@
 # voron
-Repository for all files related to my Voron 2.4 3D Printer
+Repository containing configuration, profiles, and tools related to my Voron 2.4
+3D Printer.
 
 | Directory | Content Description |
 |---|----|

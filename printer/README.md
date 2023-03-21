@@ -56,6 +56,14 @@ Adaptive bedmesh is a set of macros and a custom tool that will parse the GCode 
 the bed area being used by the print and adjust the printer's bed mesh calibration accordingly. The goal is to
 speed up the printing time by only generating a mesh for the area the print will use.
 
+There are various other versions of adaptive bed mesh for Klipper. The advantage (in my opinion) of this version
+is that, once setup, it places no further requirements in order to use it:
+
+* There is no need to enable object exclusion in Klipper and/or Moonraker.
+* There is no need to re-upload the GCode file.
+* Since it processes the GCode file when the macro is called, it works retroactively (on previously uploaded
+files).
+
 ### Requirements
 - The custom tool requires a version of Moonraker that supports object exclusion. That support was added by commit
 6bd46a443385e35d9f27fdf47581b2fa17f15a7b ("metadata: add support for object postprocessing"). It is not necessary
@@ -69,6 +77,6 @@ in Moonraker for the purposes of object exclusion.
 2. Copy [/printer/config/macros/adaptive_bed_mesh.cfg](/printer/config/macros/adaptive_bed_mesh.cfg) to 
 `/home/pi/klipper_config`.
 3. Edit `adaptive_bed_mesh.cfg` and replace `--size={user_vars.hw.volume.x},{user_vars.hw.volume.y}` with 
-`--size=<your printer size>,<your printer size>`, where `<your printer size> is either 250, 300, or 350.
+`--size=<your printer size>,<your printer size>`, where `<your printer size>` is either 250, 300, or 350.
 4. Add `[include adaptive_bed_mesh.cfg]` to `printer.cfg`.
 5. In your `PRINT_START` macro call `ADAPTIVE_BED_MESH_CALIBRATE` instead of `BED_MESH_CALIBRATE`.
