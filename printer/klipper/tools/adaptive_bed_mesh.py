@@ -86,39 +86,50 @@ class PrintObject:
 
 
 def get_printed_objects(gcode_file):
+    object_data = []
     printed_objects = []
 
-    with tempfile.TemporaryDirectory() as tmp_dir_name:
-        # First, pass the GCode file through the cancellation
-        # processor, which will identify all of the objects and
-        # annotate with their area.
-        gcode_file = os.path.abspath(os.path.expanduser(gcode_file))
-        tmp_file = os.path.join(tmp_dir_name, os.path.basename(gcode_file))
-        with open(gcode_file, 'r') as ifd:
-            with open(tmp_file, 'w') as ofd:
-                try:
-                    preprocessor(ifd, ofd)
-                except:
-                    return printed_objects
+    # Detect if the file has already been processed and if so, use
+    # that information.
+    with open(gcode_file, 'r') as ifd:
+        for line in ifd:
+            if line.startswith("EXCLUDE_OBJECT_DEFINE"):
+                object_data.append(line)
 
-        # Next, we go through the processed file extracting all
-        # of the object definitions.
-        with open(tmp_file, 'r') as fd:
-            for line in fd:
-                if line.startswith("EXCLUDE_OBJECT_DEFINE"):
-                    obj = OBJECT_REG.match(line)
-                    center = eval("(" + obj.group("center") + ")")
-                    polygon = eval(obj.group("polygon"))
-                    box = []
-                    for coord in polygon:
-                        box.append(Point(coord[0], coord[1]))
-                    printed = PrintObject(name=obj.group("name"),
-                                          center=Point(*center),
-                                          box=box)
-                    printed_objects.append(printed)
+    if not object_data:
+        with tempfile.TemporaryDirectory() as tmp_dir_name:
+            # First, pass the GCode file through the cancellation
+            # processor, which will identify all of the objects and
+            # annotate with their area.
+            gcode_file = os.path.abspath(os.path.expanduser(gcode_file))
+            tmp_file = os.path.join(tmp_dir_name, os.path.basename(gcode_file))
+            with open(gcode_file, 'r') as ifd:
+                with open(tmp_file, 'w') as ofd:
+                    try:
+                        preprocessor(ifd, ofd)
+                    except:
+                        return printed_objects
 
-        os.unlink(tmp_file)
+            # Next, we go through the processed file extracting all
+            # of the object definitions.
+            with open(tmp_file, 'r') as fd:
+                for line in fd:
+                    if line.startswith("EXCLUDE_OBJECT_DEFINE"):
+                        object_data.append(line)
 
+            os.unlink(tmp_file)
+
+    for object_def in object_data:
+        obj = OBJECT_REG.match(object_def)
+        center = eval("(" + obj.group("center") + ")")
+        polygon = eval(obj.group("polygon"))
+        box = []
+        for coord in polygon:
+            box.append(Point(coord[0], coord[1]))
+        printed = PrintObject(name=obj.group("name"),
+                              center=Point(*center),
+                              box=box)
+        printed_objects.append(printed)
     return printed_objects
 
 
@@ -175,6 +186,8 @@ def main():
     if not opts.file or not os.access(opts.file, os.R_OK):
         return EXIT_ERROR
 
+    print(opts)
+
     objects = get_printed_objects(opts.file)
     if not objects:
         return EXIT_ERROR
@@ -217,7 +230,7 @@ def main():
                                math.ceil(opts.probes[1] * ratio.y)),
                            max_probe_count))
 
-        if opts.use_spacing:
+        if opts.use_spacing is not False:
             default_spacing = Point(default_bed_mesh_size.x / opts.probes[0],
                                     default_bed_mesh_size.y / opts.probes[1])
             spacing = Point(bed_mesh_size.x / probes.x,
