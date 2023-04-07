@@ -76,7 +76,7 @@ class Point:
     def __eq__(self, other):
         return self.x == other.x and self.y == other.y
 
-    def __str__(self):
+    def __repr__(self):
         return f"Point({self.x},{self.y})"
 
 
@@ -137,10 +137,10 @@ def get_print_area(objects, size, margin):
     min_x, min_y = 99999, 99999
     max_x, max_y = 0, 0
     for obj in objects:
-        min_x = min(min_x, obj.box[0].x)
-        min_y = min(min_y, obj.box[0].y)
-        max_x = max(max_x, obj.box[2].x)
-        max_y = max(max_y, obj.box[2].y)
+        min_x = min([min_x] + [p.x for p in obj.box])
+        min_y = min([min_y] + [p.y for p in obj.box])
+        max_x = max([max_x] + [p.x for p in obj.box])
+        max_y = max([max_y] + [p.y for p in obj.box])
 
     min_x = max(0, min_x - margin)
     max_x = min(size.x, max_x + margin)
@@ -169,7 +169,7 @@ def parse_params(options):
         value = getattr(options, attr)
         setattr(options, attr, tuple([float(x)
                                       for x in value.split(",")]))
-    options.probes = tuple([int(x) for x in options.probes.split(",")])
+    options.probes = Point(*[int(x) for x in options.probes.split(",")])
     for attr in ("size", "mesh_min", "mesh_max"):
         value = getattr(options, attr)
         setattr(options, attr, Point(*value))
@@ -186,8 +186,6 @@ def main():
     if not opts.file or not os.access(opts.file, os.R_OK):
         return EXIT_ERROR
 
-    print(opts)
-
     objects = get_printed_objects(opts.file)
     if not objects:
         return EXIT_ERROR
@@ -201,59 +199,57 @@ def main():
 
     if bed_mesh_area[0] == opts.mesh_min and bed_mesh_area[2] == opts.mesh_max:
         output_bed_mesh_params(opts.mesh_min, opts.mesh_max, opts.probes,
-                               int((opts.probes[0] * opts.probes[1]) / 2))
+                               int((opts.probes.x * opts.probes.y) / 2))
+        return EXIT_SUCCESS
+
+    ratio = Point(bed_mesh_size.x / opts.size.x,
+                  bed_mesh_size.y / opts.size.y)
+
+    # Set minimum and maximum probe counts based on the used
+    # algorithm. For more information on this, see
+    # https://www.klipper3d.org/Bed_Mesh.html?h=bicubic#mesh-interpolation
+    if opts.algo == "lagrange":
+        min_probe_count = 2
+        max_probe_count = 6
     else:
-        ratio = Point(bed_mesh_size.x / opts.size.x,
-                      bed_mesh_size.y / opts.size.y)
+        min_probe_count = 4
+        max_probe_count = 9999
 
-        # Set minimum and maximum probe counts based on the used
-        # algorithm. For more information on this, see
-        # https://www.klipper3d.org/Bed_Mesh.html?h=bicubic#mesh-interpolation
-        if opts.algo == "lagrange":
-            min_probe_count = 2
-            max_probe_count = 6
+    # If the print area used is less than the cutoff, don't need
+    # a bedmesh.
+    if ratio.x <= opts.cutoff and ratio.y <= opts.cutoff:
+        return EXIT_NO_MESH
+
+    # Compute the number of probes to be used based on print
+    # area ratio and min/max probe counts for each algorithm.
+    probes = Point(min(max(min_probe_count, math.ceil(opts.probes.x * ratio.x)),
+                       max_probe_count),
+                   min(max(min_probe_count, math.ceil(opts.probes.y * ratio.y)),
+                       max_probe_count))
+
+    if opts.use_spacing is not False:
+        default_spacing = Point(default_bed_mesh_size.x / opts.probes.x,
+                                default_bed_mesh_size.y / opts.probes.y)
+        spacing = Point(bed_mesh_size.x / probes.x, bed_mesh_size.y / probes.y)
+        if not opts.absolute_spacing:
+            if (spacing.x - default_spacing.x) > (default_spacing.x * opts.use_spacing):
+                probes.x = int(bed_mesh_size.x / default_spacing.x)
+            if (spacing.y - default_spacing.y) > (default_spacing.y * opts.use_spacing):
+                probes.y = int(bed_mesh_size.y / default_spacing.y)
         else:
-            min_probe_count = 4
-            max_probe_count = 9999
+            probes.x = int(bed_mesh_size.x / opts.use_spacing)
+            probes.y = int(bed_mesh_size.y / opts.use_spacing)
 
-        # If the print area used is less than the cutoff, don't need
-        # a bedmesh.
-        if ratio.x <= opts.cutoff and ratio.y <= opts.cutoff:
-            return EXIT_NO_MESH
+    # Compute the Relative Reference Index as close to the middle of
+    # the bed mesh as possible. Note that the probe point indexes are
+    # 0-based.
+    # If the total number of probes is odd, there is a probe point
+    # that is exactly in the middle of the bed mesh area.
+    total_probes = probes.x * probes.y
+    ref_index = (int((total_probes - 1) / 2) - 1) + (total_probes % 2)
 
-        # Compute the number of probes to be used based on print
-        # area ratio and min/max probe counts for each algorithm.
-        probes = Point(min(max(min_probe_count,
-                               math.ceil(opts.probes[0] * ratio.x)),
-                           max_probe_count),
-                       min(max(min_probe_count,
-                               math.ceil(opts.probes[1] * ratio.y)),
-                           max_probe_count))
-
-        if opts.use_spacing is not False:
-            default_spacing = Point(default_bed_mesh_size.x / opts.probes[0],
-                                    default_bed_mesh_size.y / opts.probes[1])
-            spacing = Point(bed_mesh_size.x / probes.x,
-                            bed_mesh_size.y / probes.y)
-            if not opts.absolute_spacing:
-                if (spacing.x - default_spacing.x) > (default_spacing.x * opts.use_spacing):
-                    probes.x = int(bed_mesh_size.x / default_spacing.x)
-                if (spacing.y - default_spacing.y) > (default_spacing.y * opts.use_spacing):
-                    probes.y = int(bed_mesh_size.y / default_spacing.y)
-            else:
-                probes.x = int(bed_mesh_size.x / opts.use_spacing)
-                probes.y = int(bed_mesh_size.y / opts.use_spacing)
-
-        # Compute the Relative Reference Index as close to the middle of
-        # the bed mesh as possible. Note that the probe point indexes are
-        # 0-based.
-        # If the total number of probes is odd, there is a probe point
-        # that is exactly in the middle of the bed.
-        total_probes = probes.x * probes.y
-        ref_index = (int((total_probes - 1) / 2) - 1) + (total_probes % 2)
-
-        output_bed_mesh_params(bed_mesh_area[0], bed_mesh_area[2],
-                               probes, ref_index)
+    output_bed_mesh_params(bed_mesh_area[0], bed_mesh_area[2], probes,
+                           ref_index)
 
     return EXIT_SUCCESS
 
