@@ -28,7 +28,8 @@ except ImportError:
 
 SCRIPT_PATH = pathlib.PosixPath(os.path.dirname(sys.argv[0])).absolute()
 REPO_TOP = SCRIPT_PATH.parent
-REMOTE_CONF_PATH = pathlib.PosixPath("klipper_config")
+REMOTE_CONF_PATH = pathlib.PosixPath("printer_data/config")
+REMOTE_KLIPPER_PATH = pathlib.PosixPath("klipper")
 LOCAL_CONF_PATH = pathlib.PosixPath("printer") / "config"
 DEFAULT_CONFIG = SCRIPT_PATH / "update.conf"
 
@@ -172,7 +173,7 @@ class PrinterConfig:
         try:
             st = self.connection.stat(remote_path.as_posix())
         except FileNotFoundError:
-            for pindex in range(len(remote_path.parents)-1, -1, -1):
+            for pindex in range(len(remote_path.parents) - 1, -1, -1):
                 path = remote_path.parents[pindex].as_posix()
                 try:
                     st = self.connection.stat(path)
@@ -241,7 +242,14 @@ def user_input(prompt, options=None, default=None):
                 prompt += f"\n   {option.capitalize()} - {options[option]}"
             prompt += "\n"
         else:
-            __selection = options
+            optlen = max([len(x) for x in options])
+            if optlen > 1:
+                for idx in range(len(options)):
+                    prompt += f"\n   {idx + 1} - {options[idx]}"
+                prompt += "\n"
+                __selection = [str(x) for x in range(1, len(options) + 1)]
+            else:
+                __selection = options
         for option in __selection:
             option = option.capitalize()
             __options.append(f"({option})" if option == default else option)
@@ -250,9 +258,10 @@ def user_input(prompt, options=None, default=None):
         response = input(f"{prompt} ")
         if not response and default:
             return default
-        response = [x for x in options if x.lower() == response.lower()]
+        response = set([x.lower() for x in __selection]) & \
+            set([response.lower()])
         if response:
-            return response[0]
+            return __selection.index(list(response)[0])
 
 
 def split_diff(diff):
@@ -280,8 +289,8 @@ def split_diff(diff):
         if from_parts[i] != to_parts[i]:
             break
     if i:
-        from_file = from_file.relative_to(from_file.parents[i-1])
-        to_file = to_file.relative_to(to_file.parents[i-1])
+        from_file = from_file.relative_to(from_file.parents[i - 1])
+        to_file = to_file.relative_to(to_file.parents[i - 1])
     else:
         from_file = from_file.name
         to_file = to_file.name
@@ -671,18 +680,123 @@ def sync_config(conn, config, opts, tempdir):
     return 0
 
 
+def discover_devices(conn):
+    _in, _out, _err = conn.exec_command("ls -1 /dev/serial/by-id")
+    devices = _out.read()
+    devices = devices.decode().strip().split("\n")
+    print(f"Found {len(devices)} devices...")
+    if len(devices) == 1:
+        return devices[0]
+    dev = user_input("Select device", devices)
+    return devices[dev]
+
+
+def exec_client_command(client, command):
+    transport = client.get_transport()
+    channel = transport.open_session()
+    channel.set_combine_stderr(True)
+    channel.exec_command(command)
+    while True:
+        data = channel.recv(1024)
+        if not data:
+            break
+        print(data.decode(), end="")
+    return channel.recv_exit_status()
+
+
+def build_firmware(client, sftp, config_file):
+    # Transfer the config file
+    printer = PrinterConfig(sftp, REMOTE_KLIPPER_PATH, REPO_TOP)
+    printer.upload_file(config_file.name, config_file)
+    cmds = [f"make clean KCONFIG_CONFIG={config_file.name}",
+            f"make olddefconfig KCONFIG_CONFIG={config_file.name}",
+            f"make KCONFIG_CONFIG={config_file.name}"]
+    cmds = [f"cd {REMOTE_KLIPPER_PATH} ; " + x for x in cmds]
+
+    for cmd in cmds:
+        status = exec_client_command(client, cmd)
+        if status != 0:
+            break
+
+    if status != 0:
+        return status
+
+    response = user_input("Please check above results. Everything OK?",
+                          ["y", "n"])
+    if response == "n":
+        return -1
+    return 0
+
+
+def flash_firmware(client, sftp, device):
+    # Transfer the config file
+    printer = PrinterConfig(sftp, REMOTE_KLIPPER_PATH, REPO_TOP)
+    printer.upload_file(device["config"].name, device["config"])
+    cmd = f"make flash FLASH_DEVICE=/dev/serial/by-id/{device['dev']}" + \
+        f" KCONFIG_CONFIG={device['config'].name}"
+
+    print("Before flashing firmware, stop Klipper by running")
+    print("'sudo systemctl stop klipper' on the printer.")
+    print()
+    response = user_input("Confirm device firmware flash?", ["y", "n"],
+                          default="n")
+    if response == "n":
+        return -1
+
+    return exec_client_command(client, cmd)
+
+
+def firmware_update(client, sftp, config, opts, tempdir):
+    devmap = {"host": {"config": None}, "mcu": {"config": None, "dev": None}}
+    if config.has_section("firmware"):
+        devmap["host"]["config"] = pathlib.PosixPath(config.get("firmware",
+                                                                "host_config",
+                                                                fallback=None))
+        devmap["mcu"]["config"] = pathlib.PosixPath(config.get("firmware",
+                                                               "mcu_config",
+                                                               fallback=None))
+        devmap["mcu"]["dev"] = config.get("firmware", "mcu_device",
+                                          fallback=None)
+
+    modes = [opts.mode] if opts.mode != "all" else ["build", "flash"]
+    devices = [opts.device] if opts.device != "all" else ["host", "mcu"]
+    for device in devices:
+        if not devmap[device]["config"]:
+            print(f"Missing config for device '{device}'")
+            return 1
+        devmap[device]["config"] = devmap[device]["config"]
+
+    if "mcu" in devices and "flash" in modes:
+        if not devmap["mcu"]["dev"]:
+            devmap["mcu"]["dev"] = discover_devices(client)
+
+    for device in devices:
+        for op in modes:
+            if op == "build":
+                print(f"Building firmware for device '{device}'...")
+                status = build_firmware(client, sftp, devmap[device]["config"])
+            else:
+                print(f"Flashing firmware for device '{device}'...")
+                status = flash_firmware(client, sftp, devmap[device])
+            if status != 0:
+                return status
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(sys.argv[0],
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("--config", default=DEFAULT_CONFIG,
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--config", default=DEFAULT_CONFIG,
                         help="Tool configuration file.")
-    parser.add_argument("--exclude", action="append", default=[],
-                        help="Exclude file patterns")
-    parser.add_argument("--username",
+    common.add_argument("--exclude", action="append", default=[],
+                        help="""Exclude file patterns. Any file matching the
+                        pattern will be excluded from the file set the tool
+                        operates on.""")
+    common.add_argument("--username",
                         help="""Username to use when connection to the printer.
                         This value overrides any username specified in the
                         config file.""")
-    common = argparse.ArgumentParser(add_help=False)
     common.add_argument("printer", type=str, nargs="?", default=None,
                         help="""Printer name/address. If not give, the printer
                              name specified in the config file will be used.""")
@@ -701,7 +815,7 @@ def main():
     push_parser.add_argument("--path", type=str, default=None,
                              help="Configuration file source directory")
     push_parser.add_argument("--restart", action="store_true",
-                             help="Restart firmare after config push.")
+                             help="Restart firmware after config push.")
     push_parser.set_defaults(handler=push_config)
     compare_parser = subparser.add_parser("compare",
                                           formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -737,6 +851,15 @@ def main():
     sync_parser.add_argument("--update-external", action="store_true",
                              help="Do update from external sources.")
     sync_parser.set_defaults(handler=sync_config)
+    firmware_parser = subparser.add_parser("firmware",
+                                           formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+                                           parents=[common],
+                                           help="""Build and flash host and/or MCU firmware.""")
+    firmware_parser.add_argument("--mode", choices=["build", "flash", "all"],
+                                 default="all")
+    firmware_parser.add_argument("--device", choices=["host", "mcu", "all"],
+                                 default="all", help="Device to flash.")
+    firmware_parser.set_defaults(handler=firmware_update)
     opts = parser.parse_args(sys.argv[1:])
 
     config = configparser.ConfigParser(
@@ -786,7 +909,12 @@ def main():
     # Open a SFTP connection. This will be the connection that will
     # be used for all transfers
     sftp = client.open_sftp()
-    status = opts.handler(sftp, config, opts, tempdir)
+
+    # The firmware update handler needs the SSH client
+    if opts.handler == firmware_update:
+        status = opts.handler(client, sftp, config, opts, tempdir)
+    else:
+        status = opts.handler(sftp, config, opts, tempdir)
     client.close()
     clean_temp_dir(tempdir)
     return status
