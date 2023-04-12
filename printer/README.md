@@ -4,7 +4,7 @@ List of some hardware and software references for printer configuration.
 ## BTT Octopus
 
 - Board Manual: https://github.com/bigtreetech/BIGTREETECH-OCTOPUS-V1.0/blob/master/BIGTREETECH_Octopus_EN_updated_0719.pdf
-- Board Pinout: https://github.com/bigtreetech/BIGTREETECH-OCTOPUS-V1.0/blob/master/Hardware/BIGTREETECH%20Octopus%20-%20PIN.pdf
+- Board Pinout: [docs/BIGTREETECH Octopus - PIN.pdf](docs/BIGTREETECH%20Octopus%20-%20PIN.pdf)
 - Voron Wiring Guide: https://docs.vorondesign.com/build/electrical/v2_octopus_wiring.html
 
 ![BTT Octopus Wiring](https://docs.vorondesign.com/build/electrical/images/v2_octopus_wiring.png)
