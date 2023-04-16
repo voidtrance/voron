@@ -157,11 +157,12 @@ def get_bed_mesh_area(area, mesh_min, mesh_max):
     return [Point(min_x, min_y), Point(min_x, max_y), Point(max_x, max_y), Point(max_x, min_y)]
 
 
-def output_bed_mesh_params(mesh_min, mesh_max, probes, ref_index):
+def output_bed_mesh_params(mesh_min, mesh_max, probes, ref_index, algorithm):
     print(f"VALUE_UPDATE:min_mesh={mesh_min.x},{mesh_min.y}")
     print(f"VALUE_UPDATE:max_mesh={mesh_max.x},{mesh_max.y}")
     print(f"VALUE_UPDATE:probe_count={probes.x},{probes.y}")
     print(f"VALUE_UPDATE:ref_index={ref_index}")
+    print(f"VALUE_UPDATE:algorithm={algorithm}")
 
 
 def parse_params(options):
@@ -184,10 +185,13 @@ def main():
     opts = parse_params(opts)
 
     if not opts.file or not os.access(opts.file, os.R_OK):
+        print(f"Cannot read GCode file '{opts.file}", file=sys.stderr)
         return EXIT_ERROR
 
     objects = get_printed_objects(opts.file)
     if not objects:
+        print(f"Did not find any objects in GCode file '{opts.file}",
+              file=sys.stderr)
         return EXIT_ERROR
 
     area = get_print_area(objects, opts.size, opts.margin)
@@ -199,21 +203,12 @@ def main():
 
     if bed_mesh_area[0] == opts.mesh_min and bed_mesh_area[2] == opts.mesh_max:
         output_bed_mesh_params(opts.mesh_min, opts.mesh_max, opts.probes,
-                               int((opts.probes.x * opts.probes.y) / 2))
+                               int((opts.probes.x * opts.probes.y) / 2),
+                               opts.algo)
         return EXIT_SUCCESS
 
     ratio = Point(bed_mesh_size.x / opts.size.x,
                   bed_mesh_size.y / opts.size.y)
-
-    # Set minimum and maximum probe counts based on the used
-    # algorithm. For more information on this, see
-    # https://www.klipper3d.org/Bed_Mesh.html?h=bicubic#mesh-interpolation
-    if opts.algo == "lagrange":
-        min_probe_count = 2
-        max_probe_count = 6
-    else:
-        min_probe_count = 4
-        max_probe_count = 9999
 
     # If the print area used is less than the cutoff, don't need
     # a bedmesh.
@@ -222,10 +217,8 @@ def main():
 
     # Compute the number of probes to be used based on print
     # area ratio and min/max probe counts for each algorithm.
-    probes = Point(min(max(min_probe_count, math.ceil(opts.probes.x * ratio.x)),
-                       max_probe_count),
-                   min(max(min_probe_count, math.ceil(opts.probes.y * ratio.y)),
-                       max_probe_count))
+    probes = Point(math.ceil(opts.probes.x * ratio.x),
+                   math.ceil(opts.probes.y * ratio.y))
 
     if opts.use_spacing is not False:
         default_spacing = Point(default_bed_mesh_size.x / opts.probes.x,
@@ -240,16 +233,37 @@ def main():
             probes.x = int(bed_mesh_size.x / opts.use_spacing)
             probes.y = int(bed_mesh_size.y / opts.use_spacing)
 
+    # If any of the axis ends up having less than 3 points, the mesh not
+    # be very useful so just use the default full mesh. So, for any axis
+    # that has less than 3 points, force a minimum of 3.
+    if min(probes.x, probes.y) < 3:
+        probes.x = max(probes.x, 3)
+        probes.y = max(probes.y, 3)
+
+    # Ensure that both axes have an odd number of probe points.
+    probes.x += 1 - (probes.x % 2)
+    probes.y += 1 - (probes.y % 2)
+
+    # Determine the correct interpolation algorithm.
+    # For more information on this, see
+    # https://www.klipper3d.org/Bed_Mesh.html#mesh-interpolationcd
+    algo = opts.algo
+    probe_count_limits = {"lagrange": (0, 6), "bicubic": (4, 9999)}
+    if min(probes.x, probes.y) < probe_count_limits[opts.algo][0] or \
+            max(probes.x, probes.y) > probe_count_limits[opts.algo][1]:
+        idx = list(probe_count_limits.keys()).index(opts.algo)
+        algo = list(probe_count_limits.keys())[1 - idx]
+
     # Compute the Relative Reference Index as close to the middle of
     # the bed mesh as possible. Note that the probe point indexes are
     # 0-based.
     # If the total number of probes is odd, there is a probe point
     # that is exactly in the middle of the bed mesh area.
     total_probes = probes.x * probes.y
-    ref_index = (int((total_probes - 1) / 2) - 1) + (total_probes % 2)
+    ref_index = int((total_probes - 1) / 2) + (total_probes % 2)
 
     output_bed_mesh_params(bed_mesh_area[0], bed_mesh_area[2], probes,
-                           ref_index)
+                           ref_index, algo)
 
     return EXIT_SUCCESS
 
