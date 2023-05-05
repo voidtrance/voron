@@ -237,7 +237,7 @@ def user_input(prompt, options=None, default=None):
             default = None
         __options = []
         if isinstance(options, dict):
-            __selection = options.keys()
+            __selection = list(options.keys())
             for option in options:
                 prompt += f"\n   {option.capitalize()} - {options[option]}"
             prompt += "\n"
