@@ -157,11 +157,10 @@ def get_bed_mesh_area(area, mesh_min, mesh_max):
     return [Point(min_x, min_y), Point(min_x, max_y), Point(max_x, max_y), Point(max_x, min_y)]
 
 
-def output_bed_mesh_params(mesh_min, mesh_max, probes, ref_index, algorithm):
+def output_bed_mesh_params(mesh_min, mesh_max, probes, algorithm):
     print(f"VALUE_UPDATE:min_mesh={mesh_min.x},{mesh_min.y}")
     print(f"VALUE_UPDATE:max_mesh={mesh_max.x},{mesh_max.y}")
     print(f"VALUE_UPDATE:probe_count={probes.x},{probes.y}")
-    print(f"VALUE_UPDATE:ref_index={ref_index}")
     print(f"VALUE_UPDATE:algorithm={algorithm}")
 
 
@@ -203,7 +202,6 @@ def main():
 
     if bed_mesh_area[0] == opts.mesh_min and bed_mesh_area[2] == opts.mesh_max:
         output_bed_mesh_params(opts.mesh_min, opts.mesh_max, opts.probes,
-                               int((opts.probes.x * opts.probes.y) / 2),
                                opts.algo)
         return EXIT_SUCCESS
 
@@ -254,16 +252,8 @@ def main():
         idx = list(probe_count_limits.keys()).index(opts.algo)
         algo = list(probe_count_limits.keys())[1 - idx]
 
-    # Compute the Relative Reference Index as close to the middle of
-    # the bed mesh as possible. Note that the probe point indexes are
-    # 0-based.
-    # If the total number of probes is odd, there is a probe point
-    # that is exactly in the middle of the bed mesh area.
-    total_probes = probes.x * probes.y
-    ref_index = int((total_probes - 1) / 2) + (total_probes % 2)
-
     output_bed_mesh_params(bed_mesh_area[0], bed_mesh_area[2], probes,
-                           ref_index, algo)
+                           algo)
 
     return EXIT_SUCCESS
 
