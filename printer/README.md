@@ -45,7 +45,7 @@ To reflash the Octopus (STM32F446XX) bootloader, use the following steps:
 `sudo dfu-util -d ,0483:df11 -R -a 0 -s 0x8000000:leave -D bootloader.bin`
 
 ## Tuning Guides
-- https://github.com/AndrewEllis93/Print-Tuning-Guide
+- https://ellis3dp.com/Print-Tuning-Guide/
 
 ## Slicer Settings and Profiles
 - Andrew Ellis PIF Profile: https://github.com/AndrewEllis93/Ellis-PIF-Profile
