@@ -50,19 +50,16 @@ arg_parser.add_argument("--algo", type=str, default="lagrange",
                         choices=["lagrange", "bicubic"],
                         help="Bed mesh interpolation algorithm.")
 arg_parser.add_argument("--use-spacing", type=int, const=0, nargs="?",
-                        default=False,
+                        default=None,
                         help="""Generate X and Y probe point counts
-                                that attempt to preserve the spacing
-                                between probe points. If a value is
-                                given, probe counts are adjusted only
-                                if the difference is spacing is greater
-                                than this percentage of the default
-                                spacing.""")
-arg_parser.add_argument("--absolute-spacing", action="store_true",
-                        help="""The spacing value specified by
-                                --use-spacing is in mm instead of
-                                percent.""")
-
+                                based on the spacing between the
+                                probe points in the default mesh.
+                                A ratio between the spacing in the
+                                adaptive bed mesh and the default bed
+                                mesh is computed and probe points are
+                                re-computed based on that ratio. If a
+                                non-zero value is given, ratio lower
+                                that that percentage will be ignored.""")
 
 OBJECT_REG = re.compile(
     r'^EXCLUDE_OBJECT_DEFINE NAME=(?P<name>[^ ]+) CENTER=(?P<center>[0-9,.]+) POLYGON=(?P<polygon>[]0-9,.[]+)$')
@@ -174,8 +171,9 @@ def parse_params(options):
         value = getattr(options, attr)
         setattr(options, attr, Point(*value))
     options.cutoff = options.cutoff / 100.0
-    if options.use_spacing:
-        options.use_spacing = options.use_spacing / 100.0
+    if options.use_spacing is not None:
+        if options.use_spacing != 0:
+            options.use_spacing = options.use_spacing / 100.0
     return options
 
 
@@ -210,7 +208,7 @@ def main():
 
     # If the print area used is less than the cutoff, don't need
     # a bedmesh.
-    if ratio.x <= opts.cutoff and ratio.y <= opts.cutoff:
+    if opts.cutoff and ratio.x <= opts.cutoff and ratio.y <= opts.cutoff:
         return EXIT_NO_MESH
 
     # Compute the number of probes to be used based on print
@@ -218,25 +216,28 @@ def main():
     probes = Point(math.ceil(opts.probes.x * ratio.x),
                    math.ceil(opts.probes.y * ratio.y))
 
-    if opts.use_spacing is not False:
-        default_spacing = Point(default_bed_mesh_size.x / opts.probes.x,
-                                default_bed_mesh_size.y / opts.probes.y)
-        spacing = Point(bed_mesh_size.x / probes.x, bed_mesh_size.y / probes.y)
-        if not opts.absolute_spacing:
-            if (spacing.x - default_spacing.x) > (default_spacing.x * opts.use_spacing):
-                probes.x = int(bed_mesh_size.x / default_spacing.x)
-            if (spacing.y - default_spacing.y) > (default_spacing.y * opts.use_spacing):
-                probes.y = int(bed_mesh_size.y / default_spacing.y)
-        else:
-            probes.x = int(bed_mesh_size.x / opts.use_spacing)
-            probes.y = int(bed_mesh_size.y / opts.use_spacing)
-
-    # If any of the axis ends up having less than 3 points, the mesh not
-    # be very useful so just use the default full mesh. So, for any axis
-    # that has less than 3 points, force a minimum of 3.
+    # If any of the axis ends up having less than 3 points, the mesh is
+    # not very useful so ensure that both axes have at least 3 probe
+    # points.
     if min(probes.x, probes.y) < 3:
         probes.x = max(probes.x, 3)
         probes.y = max(probes.y, 3)
+
+    if opts.use_spacing is not None:
+        # By definition, the number of probe points will be less than the
+        # number defined in the configuration.
+        # When computing the number of points, some fidelity can be lost
+        # due to the fact that probe points have to be integers. This can
+        # result in there being too much distance between the probe points.
+        default_spacing = Point(default_bed_mesh_size.x / opts.probes.x,
+                                default_bed_mesh_size.y / opts.probes.y)
+        spacing = Point(bed_mesh_size.x / probes.x, bed_mesh_size.y / probes.y)
+        spacing_delta = Point((spacing.x - default_spacing.x) / spacing.x,
+                              (spacing.y - default_spacing.y) / spacing.y)
+        if spacing_delta.x > 0.0 and spacing_delta.x >= opts.use_spacing:
+            probes.x += math.ceil(probes.x * spacing_delta.x)
+        if spacing_delta.y > 0.0 and spacing_delta.y >= opts.use_spacing:
+            probes.y += math.ceil(probes.y * spacing_delta.y)
 
     # Ensure that both axes have an odd number of probe points.
     probes.x += 1 - (probes.x % 2)
@@ -247,9 +248,9 @@ def main():
     # https://www.klipper3d.org/Bed_Mesh.html#mesh-interpolationcd
     algo = opts.algo
     probe_count_limits = {"lagrange": (0, 6), "bicubic": (4, 9999)}
-    if min(probes.x, probes.y) < probe_count_limits[opts.algo][0] or \
-            max(probes.x, probes.y) > probe_count_limits[opts.algo][1]:
-        idx = list(probe_count_limits.keys()).index(opts.algo)
+    if min(probes.x, probes.y) < probe_count_limits[algo][0] or \
+            max(probes.x, probes.y) > probe_count_limits[algo][1]:
+        idx = list(probe_count_limits.keys()).index(algo)
         algo = list(probe_count_limits.keys())[1 - idx]
 
     output_bed_mesh_params(bed_mesh_area[0], bed_mesh_area[2], probes,
