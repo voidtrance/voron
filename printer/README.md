@@ -46,6 +46,8 @@ To reflash the Octopus (STM32F446XX) bootloader, use the following steps:
 
 ## Tuning Guides
 - https://ellis3dp.com/Print-Tuning-Guide/
+- PA Calibration: https://ellis3dp.com/Pressure_Linear_Advance_Tool/
+- EM Calibration: https://ellis3dp.com/Print-Tuning-Guide/articles/extrusion_multiplier.html#method
 
 ## Slicer Settings and Profiles
 - Andrew Ellis PIF Profile: https://github.com/AndrewEllis93/Ellis-PIF-Profile
