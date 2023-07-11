@@ -2,7 +2,7 @@
 # file. This file is mostly for UI and application
 # configuration.
 SuperSlicer.ini
-slicer/profiles/cache*
-slicer/profiles/ui_layout*
+slicer/profiles/superslicer/cache*
+slicer/profiles/superslicer/ui_layout*
 *.bak
 *.pyc
