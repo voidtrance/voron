@@ -2,7 +2,12 @@
 # file. This file is mostly for UI and application
 # configuration.
 SuperSlicer.ini
+OrcaSlicer.conf
 slicer/profiles/superslicer/cache*
 slicer/profiles/superslicer/ui_layout*
+slicer/profiles/orcaslicer/log/*
+slicer/profiles/orcaslicer/system/*
+slicer/profiles/orcaslicer/ui_layout/*
+slicer/profiles/orcaslicer/hms/*
 *.bak
 *.pyc
