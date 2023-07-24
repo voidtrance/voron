@@ -13,6 +13,11 @@ import fnmatch
 import sys
 import moonraker
 import configparser
+import subprocess
+import select
+import socket
+import termios
+import tty
 from shutil import copy2 as filecopy
 
 try:
@@ -691,18 +696,57 @@ def discover_devices(conn):
     return devices[dev]
 
 
-def exec_client_command(client, command):
-    transport = client.get_transport()
-    channel = transport.open_session()
-    channel.set_combine_stderr(True)
-    channel.exec_command(command)
-    while True:
-        data = channel.recv(1024)
-        if not data:
-            break
-        print(data.decode(), end="")
-    return channel.recv_exit_status()
+def exec_ssh_session(channel):
+    # This code has been adapted from
+    # https://github.com/sirosen/paramiko-shell/blob/master/interactive_shell.py
+    def resize_pty():
+        tty_height, tty_width = subprocess.check_output(
+            ['stty', 'size']).split()
+        try:
+            channel.resize_pty(width=int(tty_width), height=int(tty_height))
+        except paramiko.ssh_exception.SSHException:
+            pass
 
+    oldtty_attrs = termios.tcgetattr(sys.stdin)
+    try:
+        stdin_fileno = sys.stdin.fileno()
+        tty.setraw(stdin_fileno)
+        tty.setcbreak(stdin_fileno)
+        channel.settimeout(0.0)
+        is_alive = True
+        while is_alive:
+            resize_pty()
+            read, write, exc = select.select([channel, sys.stdin], [], [])
+            if channel in read:
+                try:
+                    out = channel.recv(1024)
+                    if len(out) == 0:
+                        is_alive = False
+                    else:
+                        print(out.decode(), end='')
+                        sys.stdout.flush()
+                except socket.timeout:
+                    pass
+            if sys.stdin in read and is_alive:
+                char = os.read(stdin_fileno, 1)
+                if len(char) == 0:
+                    is_alive = False
+                else:
+                    channel.send(char)
+        exit_status = channel.recv_exit_status()
+        channel.shutdown(2)
+    finally:
+        termios.tcsetattr(sys.stdin, termios.TCSAFLUSH, oldtty_attrs)
+    return exit_status
+
+def exec_client_command(client, command):
+    i, o, e = client.exec_command(command, get_pty=True)
+    return exec_ssh_session(o.channel)
+
+
+def interactive_shell(client):
+    channel = client.invoke_shell()
+    return exec_ssh_session(channel)
 
 def build_firmware(client, sftp, config_file):
     # Transfer the config file
@@ -732,8 +776,9 @@ def flash_firmware(client, sftp, device):
     # Transfer the config file
     printer = PrinterConfig(sftp, REMOTE_KLIPPER_PATH, REPO_TOP)
     printer.upload_file(device["config"].name, device["config"])
-    cmd = f"make flash FLASH_DEVICE=/dev/serial/by-id/{device['dev']}" + \
-        f" KCONFIG_CONFIG={device['config'].name}"
+    cmd = f"cd {REMOTE_KLIPPER_PATH} ; make flash KCONFIG_CONFIG={device['config'].name}"
+    if device.get("dev", None):
+        cmd += f" FLASH_DEVICE=/dev/serial/by-id/{device['dev']}"
 
     print("Before flashing firmware, stop Klipper by running")
     print("'sudo systemctl stop klipper' on the printer.")
@@ -777,11 +822,71 @@ def firmware_update(client, sftp, config, opts, tempdir):
                 status = build_firmware(client, sftp, devmap[device]["config"])
             else:
                 print(f"Flashing firmware for device '{device}'...")
+                if device == "host":
+                    status = exec_client_command(client,
+                                                 "sudo service klipper stop")
+                    if status != 0:
+                        return status
                 status = flash_firmware(client, sftp, devmap[device])
+                if status != 0:
+                    return status
+                status = exec_client_command(
+                    client, "sudo service klipper restart")
             if status != 0:
                 return status
     return 0
 
+
+def printer_reinstall(client, sftp, config, opts, tempdir):
+    if not config.has_section("reinstall"):
+        print("Missing 'reinstall' config section")
+        return -1
+
+    # 1. Clone all repositories
+    repos = config.get("reinstall", "repositories")
+    repos = [x.strip() for x in repos.split("\n") if x]
+    top_path = config.get("reinstall", "path")
+    for repo in repos:
+        repo_config_name = f"repository {repo}"
+        if not config.has_section(repo_config_name):
+            print(f"Configuration for repository '{repo}' is missing.")
+            continue
+        source = config.get(repo_config_name, "source")
+        source_path = pathlib.Path(source)
+        script = config.get(repo_config_name, "setup")
+        print(f"Cloning '{repo}'...")
+        cmd = f"cd {top_path} ; [ ! -d ./{source_path.stem} ] && git clone {source} || exit 0"
+        status = exec_client_command(client, cmd)
+        if status != 0:
+            return status
+        print(f"Installing '{repo}'...")
+        cmd = f"cd {top_path} && ./{source_path.stem}/{script}"
+        status = exec_client_command(client, cmd)
+        if status != 0:
+            return status
+
+    # 2. Setup Klipper host MCU
+    cmd = "cd ~/klipper && sudo cp ./scripts/klipper-mcu.service /etc/systemd/system/"
+    status = exec_client_command(client, cmd)
+    if status != 0:
+        return status
+    flash_opts = argparse.Namespace()
+    flash_opts.printer = opts.printer
+    flash_opts.device = "host"
+    flash_opts.mode = "all"
+    status = firmware_update(client, sftp, config, flash_opts, tempdir)
+    if status != 0:
+        return status
+
+    # 3. Push the config to the printer
+    push_opts = argparse.Namespace()
+    push_opts.printer = opts.printer
+    push_opts.exclude = opts.exclude
+    push_opts.update_external = False
+    push_opts.restart = True
+    status = push_config(sftp, config, opts, tempdir)
+
+    return status
 
 def main():
     parser = argparse.ArgumentParser(sys.argv[0],
@@ -814,6 +919,8 @@ def main():
                                        help="Upload local configuration to printer.")
     push_parser.add_argument("--path", type=str, default=None,
                              help="Configuration file source directory")
+    push_parser.add_argument("--update-external", action="store_true",
+                             help="Do update from external sources.")
     push_parser.add_argument("--restart", action="store_true",
                              help="Restart firmware after config push.")
     push_parser.set_defaults(handler=push_config)
@@ -860,6 +967,17 @@ def main():
     firmware_parser.add_argument("--device", choices=["host", "mcu", "all"],
                                  default="all", help="Device to flash.")
     firmware_parser.set_defaults(handler=firmware_update)
+    shell_parser = subparser.add_parser("shell",
+                                        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+                                        parents=[common],
+                                        help="""Start an interactive shell on the
+                                        printer.""")
+    shell_parser.set_defaults(handler=interactive_shell)
+    reinstall_parser = subparser.add_parser("reinstall",
+                                            formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+                                            parents=[common],
+                                            help="""Resinstall printer software.""")
+    reinstall_parser.set_defaults(handler=printer_reinstall)
     opts = parser.parse_args(sys.argv[1:])
 
     config = configparser.ConfigParser(
@@ -911,7 +1029,11 @@ def main():
     sftp = client.open_sftp()
 
     # The firmware update handler needs the SSH client
-    if opts.handler == firmware_update:
+    if opts.handler == interactive_shell:
+        status = opts.handler(client)
+    elif opts.handler == printer_reinstall:
+        status = opts.handler(client, sftp, config, opts, tempdir)
+    elif opts.handler == firmware_update:
         status = opts.handler(client, sftp, config, opts, tempdir)
     else:
         status = opts.handler(sftp, config, opts, tempdir)
