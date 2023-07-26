@@ -1,15 +1,19 @@
 {
+    "chamber_temperature": "40",
     "default_filament_colour": [
-        "#00FF00"
+        "#0000FF"
     ],
     "enable_pressure_advance": [
         "1"
     ],
     "fan_cooling_layer_time": [
-        "0"
+        "45"
     ],
-    "filament_density": [
-        "1.22"
+    "fan_max_speed": [
+        "40"
+    ],
+    "fan_min_speed": [
+        "40"
     ],
     "filament_flow_ratio": [
         "0.92"
@@ -18,23 +22,29 @@
         "15"
     ],
     "filament_settings_id": [
-        "FusionFilament HTPLA+"
+        "Sparta ABS+"
     ],
     "filament_start_gcode": [
         "; filament start gcode"
     ],
+    "filament_type": [
+        "ABS"
+    ],
     "from": "User",
-    "full_fan_speed_layer": [
-        "4"
+    "hot_plate_temp": [
+        "100"
+    ],
+    "hot_plate_temp_initial_layer": [
+        "100"
     ],
     "inherits": "Voron Generic PLA",
     "is_custom_defined": "0",
-    "name": "FusionFilament HTPLA+",
+    "name": "Sparta ABS+",
     "nozzle_temperature": [
-        "235"
+        "240"
     ],
     "nozzle_temperature_initial_layer": [
-        "235"
+        "240"
     ],
     "nozzle_temperature_range_high": [
         "250"

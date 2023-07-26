@@ -60,7 +60,7 @@
         "15",
         "12"
     ],
-    "machine_start_gcode": "M190 S0\nM109 S0 ; uncomment to remove set&wait temp gcode added automatically after this start gcode\nPRINT_START EXTRUDER={first_layer_temperature[initial_extruder]} BED=[first_layer_bed_temperature] CHAMBER=[chamber_temperature] FTYPE={filament_type[initial_extruder]} BEDMESH=1 SKIRTS={skirt_loops}\n",
+    "machine_start_gcode": "PRINT_START EXTRUDER={first_layer_temperature[initial_extruder]} BED=[first_layer_bed_temperature] CHAMBER=[chamber_temperature] FTYPE={filament_type[initial_extruder]} BEDMESH=1 SKIRTS={skirt_loops}\n",
     "max_layer_height": [
         "0.3"
     ],
