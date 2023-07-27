@@ -3,6 +3,7 @@
 # configuration.
 SuperSlicer.ini
 OrcaSlicer.conf
+hints.cereal
 slicer/profiles/superslicer/cache*
 slicer/profiles/superslicer/ui_layout*
 slicer/profiles/orcaslicer/log/*
