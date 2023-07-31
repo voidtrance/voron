@@ -1,8 +1,16 @@
-from . import requests
+from .lib import requests
+from os.path import basename
+import enum
 
 DEFAULT_MOONRAKER_ADDRESS = "localhost"
 DEFAULT_MOONRAKER_PORT = 7125
 
+
+@enum.unique
+class FileType(enum.StrEnum):
+    GCODE = "gcodes"
+    CONFIG = "config"
+    LOG = "log"
 
 class Connection:
     """
@@ -191,5 +199,86 @@ class Connection:
         response = request.get()
         if response.status == requests.ResponseType.SUCCESS and \
                 response.data == "ok":
+            return True
+        return False
+
+    def upload_file(self, type: FileType, filename: str, dest: str = None) -> dict:
+        """
+        Upload a file to the printer.
+
+        Parameters
+        ----------
+            type : FileType
+               The type of the file to be uploaded - FileType.GCODE or
+               FileType.CONFIG. Depending on the type, the file will be
+               uploaded to either the location where GCode files are
+               stored or to the configuration directory.
+            filename : str
+               The source filename.
+            dest : str
+               Destination filename. This should be relative to the type's
+               root directory.
+
+        Returns
+        -------
+            True on success. False, otherwise.
+        """
+        if type == FileType.LOG:
+            return False
+        if not dest:
+            dest = basename(filename)
+        request = requests.Request(self.address, "server/files/upload",
+                                   requests.RequestType.POST)
+        request.add_params({"root": str(type), "path": dest})
+        request.add_file("file", filename)
+        response = request.get()
+        if response.status == requests.ResponseType.SUCCESS:
+            return response.data
+        return {}
+
+    def download_file(self, type: FileType, filename: str, dest: str) -> bool:
+        """
+        Download a file from the printer.
+
+        Parameters
+        ----------
+            type : FileType
+               The type of the file to be downloaded. This controls the remote
+               root path from where the file will be downloaded.
+            filename : str
+               The file to be downloaded. This path should be relative to the
+               root of the selected type.
+            dest : str
+               Local path where the file should be written.
+
+        Return
+        ------
+            True on success. In this case, a new local file will be created.
+            False, otherwise.
+        """
+        url = f"server/files/{type}/{filename}"
+        request = requests.Request(self.address, url, streaming=True)
+        response = request.get()
+        if response.status == requests.ResponseType.SUCCESS:
+            with open(dest, 'wb') as fd:
+                for chunk in response.read(1024):
+                    fd.write(chunk)
+            return True
+        return False
+
+    def delete_file(self, type: FileType, filename: str) -> bool:
+        """
+        Delete a file from the printer.
+
+        Parameters
+        ----------
+            type : FileType
+               The type of the file to be deleted.
+        """
+        url = f"server/files/{type}/{filename}"
+        request = requests.Request(self.address, url,
+                                   requests.RequestType.DELETE)
+        response = request.get()
+        if response.status == requests.ResponseType.SUCCESS:
             return True
         return False
