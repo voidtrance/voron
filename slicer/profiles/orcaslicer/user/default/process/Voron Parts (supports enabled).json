@@ -13,7 +13,7 @@
     "initial_layer_speed": "30",
     "is_custom_defined": "0",
     "name": "Voron Parts (supports enabled)",
-    "outer_wall_speed": "150",
+    "outer_wall_speed": "200",
     "precise_outer_wall": "1",
     "print_settings_id": "Voron Parts (supports enabled)",
     "skirt_loops": "3",
