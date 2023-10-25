@@ -16,6 +16,7 @@
     "outer_wall_speed": "200",
     "precise_outer_wall": "1",
     "print_settings_id": "Voron Parts (supports enabled)",
+    "skirt_distance": "5",
     "skirt_loops": "3",
     "small_perimeter_threshold": "6",
     "sparse_infill_density": "40%",
