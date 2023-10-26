@@ -555,7 +555,7 @@ def update_config(conn, config, opts, tempdir):
                 continue
             print(f"Update from external source: {external}...")
             if update_from_external(config.get(external, "source"),
-                                    config.get(external, "branch", None),
+                                    config.get(external, "branch", fallback=None),
                                     config.get(external, "destination"),
                                     opts.path,
                                     config.getlist(external, "exclude")):
@@ -692,7 +692,10 @@ def discover_devices(conn):
     print(f"Found {len(devices)} devices...")
     if len(devices) == 1:
         return devices[0]
+    devices.append("None")
     dev = user_input("Select device", devices)
+    if devices[dev] == "None":
+        return None
     return devices[dev]
 
 
@@ -792,28 +795,28 @@ def flash_firmware(client, sftp, device):
 
 
 def firmware_update(client, sftp, config, opts, tempdir):
-    devmap = {"host": {"config": None}, "mcu": {"config": None, "dev": None}}
+    devmap = {"host": {}, "mcu": {}, "skirt_buttons": {}}
     if config.has_section("firmware"):
-        devmap["host"]["config"] = pathlib.PosixPath(config.get("firmware",
-                                                                "host_config",
-                                                                fallback=None))
-        devmap["mcu"]["config"] = pathlib.PosixPath(config.get("firmware",
-                                                               "mcu_config",
-                                                               fallback=None))
-        devmap["mcu"]["dev"] = config.get("firmware", "mcu_device",
-                                          fallback=None)
+        for dev in devmap:
+            devmap[dev]["config"] = \
+                pathlib.PosixPath(config.get("firmware", f"{dev}_config",
+                                             fallback=None))
+            devmap[dev]["dev"] = config.get("firmware", f"{dev}_device")
 
     modes = [opts.mode] if opts.mode != "all" else ["build", "flash"]
-    devices = [opts.device] if opts.device != "all" else ["host", "mcu"]
+    devices = [opts.device] if opts.device != "all" else list(devmap.keys())
     for device in devices:
         if not devmap[device]["config"]:
             print(f"Missing config for device '{device}'")
             return 1
-        devmap[device]["config"] = devmap[device]["config"]
 
-    if "mcu" in devices and "flash" in modes:
-        if not devmap["mcu"]["dev"]:
-            devmap["mcu"]["dev"] = discover_devices(client)
+    if "flash" in modes:
+        for dev in devices:
+            if not devmap[dev]["dev"]:
+                devmap[dev]["dev"] = discover_devices(client)
+        status = exec_client_command(client, "sudo service klipper stop")
+        if status != 0:
+            return status
 
     for device in devices:
         for op in modes:
@@ -821,19 +824,17 @@ def firmware_update(client, sftp, config, opts, tempdir):
                 print(f"Building firmware for device '{device}'...")
                 status = build_firmware(client, sftp, devmap[device]["config"])
             else:
-                print(f"Flashing firmware for device '{device}'...")
-                if device == "host":
-                    status = exec_client_command(client,
-                                                 "sudo service klipper stop")
+                if devmap[device]["dev"]:
+                    print(f"Flashing firmware for device '{device}'...")
+                    status = flash_firmware(client, sftp, devmap[device])
                     if status != 0:
                         return status
-                status = flash_firmware(client, sftp, devmap[device])
-                if status != 0:
-                    return status
-                status = exec_client_command(
-                    client, "sudo service klipper restart")
-            if status != 0:
-                return status
+                    
+    if "flash" in modes:
+        status = exec_client_command(client, "sudo service klipper restart")
+        if status != 0:
+            return status
+
     return 0
 
 
@@ -964,7 +965,7 @@ def main():
                                            help="""Build and flash host and/or MCU firmware.""")
     firmware_parser.add_argument("--mode", choices=["build", "flash", "all"],
                                  default="all")
-    firmware_parser.add_argument("--device", choices=["host", "mcu", "all"],
+    firmware_parser.add_argument("--device", choices=["host", "mcu", "skirt_buttons", "all"],
                                  default="all", help="Device to flash.")
     firmware_parser.set_defaults(handler=firmware_update)
     shell_parser = subparser.add_parser("shell",
