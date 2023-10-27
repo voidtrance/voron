@@ -108,4 +108,5 @@ The following type codes are defined:
 | 100000100 | PLA | eSun PLA+ |
 | 100000200 | PLA | FilamentFusion HTPLA+ |
 | 200000100 | ABS | Sparta ABS+ |
+| 200000200 | ABS | FusionFilament ABS1.5 |
 | 300000100 | PETG | PolyMaker PolyLite PETG |
