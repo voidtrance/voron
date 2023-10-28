@@ -102,14 +102,13 @@ class PrinterConfig:
         for filter in filters:
             if not os.path.isabs(filter):
                 filter = "*/" + filter
+            if filter[-1] == "/":
+                filter += "*"
             self.filters.append(filter)
 
     def filter_files(self, fileset):
         if self.file_filters:
             for filename in fileset:
-                # for filter in self.file_filters:
-                #    print(filename, filter, fnmatch.fnmatch(
-                #        filename, filter))
                 if [filename for filter in self.file_filters
                         if fnmatch.fnmatch(filename, filter)]:
                     yield filename
@@ -887,6 +886,12 @@ def printer_reinstall(client, sftp, config, opts, tempdir):
     push_opts.restart = True
     status = push_config(sftp, config, opts, tempdir)
 
+    # 4. Optionally, clone the Mainsail theme
+    theme = config.get("global", "theme", fallback=None)
+    if theme:
+        cmd = f"cd ~/{REMOTE_CONF_PATH} && git clone {theme} ./theme"
+        status = exec_client_command(client, cmd)
+
     return status
 
 def main():
@@ -921,7 +926,10 @@ def main():
     push_parser.add_argument("--path", type=str, default=None,
                              help="Configuration file source directory")
     push_parser.add_argument("--update-external", action="store_true",
-                             help="Do update from external sources.")
+                             help="""Do update from external sources. External source
+                             are source outside of this repository that contain configuration
+                             files. The external configuration files are copied to this
+                             repository first, before being pushed to the pritner.""")
     push_parser.add_argument("--restart", action="store_true",
                              help="Restart firmware after config push.")
     push_parser.set_defaults(handler=push_config)
@@ -944,7 +952,10 @@ def main():
     update_parser.add_argument("--restart", action="store_true",
                                help="Restart firmware after config update.")
     update_parser.add_argument("--update-external", action="store_true",
-                               help="Do update from external sources.")
+                               help="""Do update from external sources.  External source
+                             are source outside of this repository that contain configuration
+                             files. The external configuration files are copied to this
+                             repository first, before being pushed to the pritner.""")
     update_parser.set_defaults(handler=update_config)
     sync_parser = subparser.add_parser("sync",
                                        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -957,7 +968,10 @@ def main():
     sync_parser.add_argument("--restart", action="store_true",
                              help="Restart firmware after config update.")
     sync_parser.add_argument("--update-external", action="store_true",
-                             help="Do update from external sources.")
+                             help="""Do update from external sources.  External source
+                             are source outside of this repository that contain configuration
+                             files. The external configuration files are copied to this
+                             repository first, before being pushed to the pritner.""")
     sync_parser.set_defaults(handler=sync_config)
     firmware_parser = subparser.add_parser("firmware",
                                            formatter_class=argparse.ArgumentDefaultsHelpFormatter,
