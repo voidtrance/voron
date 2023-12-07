@@ -265,6 +265,8 @@ def user_input(prompt, options=None, default=None):
         response = set([x.lower() for x in __selection]) & \
             set([response.lower()])
         if response:
+            if isinstance(options, dict):
+                return list(response)[0]
             return __selection.index(list(response)[0])
 
 
