@@ -614,7 +614,7 @@ def sync_printer_config(printer, tempdir):
                                "d": "Download remote file.",
                                "s": "Skip this file.",
                                "p": "Select individual changes to apply.",
-                               "q": "Quit"})
+                               "q": "Quit"}).lower()
         if response == "u":
             printer.upload_file(filename)
         elif response == "d":
@@ -633,7 +633,7 @@ def sync_printer_config(printer, tempdir):
                 response = user_input("Apply hunk?",
                                       {"l": "Apply to local file",
                                        "r": "Apply to remote file",
-                                       "n": "Don't apply"})
+                                       "n": "Don't apply"}).lower()
                 if response == "l":
                     for line in hunk:
                         local_patch_content.append(line)
