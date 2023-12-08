@@ -251,11 +251,11 @@ def user_input(prompt, options=None, default=None):
                 for idx in range(len(options)):
                     prompt += f"\n   {idx + 1} - {options[idx]}"
                 prompt += "\n"
-                __selection = [str(x) for x in range(1, len(options) + 1)]
+                __selection = list(range(1, len(options) + 1))
             else:
                 __selection = options
         for option in __selection:
-            option = option.capitalize()
+            option = str(option).capitalize()
             __options.append(f"({option})" if option == default else option)
         prompt += f" [{'/'.join(__options)}]"
     while True:
@@ -265,9 +265,10 @@ def user_input(prompt, options=None, default=None):
         response = set([x.lower() for x in __selection]) & \
             set([response.lower()])
         if response:
-            if isinstance(options, dict):
-                return list(response)[0]
-            return __selection.index(list(response)[0])
+            response = list(response)[0]
+            if isinstance(__selection[0], int):
+                return __selection.index(response)
+            return response
 
 
 def split_diff(diff):
@@ -587,11 +588,8 @@ def sync_printer_config(printer, tempdir):
     local_files = set(printer.get_local_files(True))
     remote_files = set(printer.get_remote_files(True))
     for filename in remote_files:
-        try:
-            printer.download_file(filename, tempdir)
-        except:
-            print(remote_files, filename, tempdir)
-    for filename in local_files:
+        printer.download_file(filename, tempdir)
+    for filename in set(local_files) | set(remote_files):
         if filename not in remote_files:
             response = user_input(f"Local file {FILENAME_COLOR}{filename}{GColor.END} not on printer. Upload it?",
                                   ["y", "n"], "y")
@@ -601,6 +599,12 @@ def sync_printer_config(printer, tempdir):
             continue
         else:
             remote_files.remove(filename)
+        if filename not in local_files:
+            response = user_input(f"Remote file {FILENAME_COLOR}{filename}{GColor.END} not in local repo. Download it?",
+                                  ["y", "n"])
+            if response == "y":
+                printer.download_file(filename)
+            continue
         diff = compare_files(tempdir / filename, printer.local_root / filename)
         if not diff:
             continue
@@ -615,6 +619,7 @@ def sync_printer_config(printer, tempdir):
                                "s": "Skip this file.",
                                "p": "Select individual changes to apply.",
                                "q": "Quit"}).lower()
+        print(response)
         if response == "u":
             printer.upload_file(filename)
         elif response == "d":
