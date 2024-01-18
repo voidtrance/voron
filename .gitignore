@@ -10,5 +10,6 @@ slicer/profiles/orcaslicer/log/*
 slicer/profiles/orcaslicer/system/*
 slicer/profiles/orcaslicer/ui_layout/*
 slicer/profiles/orcaslicer/hms/*
+slicer/profiles/orcaslicer/printers/*
 *.bak
 *.pyc
