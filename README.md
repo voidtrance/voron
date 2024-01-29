@@ -8,18 +8,18 @@ Repository containing configuration, profiles, and tools related to my Voron 2.4
         <tr valign="top"><td>Printer Type</td><td>Voron2.4</td></tr>
         <tr valign="top"><td>Printer Size</td><td>300mm</td></tr>
         <tr valign="top"><td>Mods</td>
-            <td><li>[Klicky Probe](https://github.com/jlas1/Klicky-Probe)</li>
-                <li>[Skirt Buttons](https://github.com/3DAixperts/skirt-button-pcb)</li>
-                <li>[THE FILTER](https://github.com/nateb16/VoronUsers/tree/master/printer_mods/nateb16/THE_FILTER)</li>
-                <li>[VEFACH](https://github.com/VoronDesign/VoronUsers/tree/master/printer_mods/KevinAkaSam/VEFACH)</li>
-                <li>[Voron Decontaminator](https://mods.vorondesign.com/detail/eiGz71BOprk2GapXbQVgA)</li>
-                <li>[Sturdy Handles](https://github.com/VoronDesign/VoronUsers/tree/master/printer_mods/jeoje/Sturdy_Handles)</li>
-                <li>[Annex Panel Clips](https://github.com/Annex-Engineering/Annex-Engineering_User_Mods/tree/main/Printers/All_Printers/annex_dev-Panel_2020_Clips_and_Hinges)</li>
+            <td><li><a href="https://github.com/jlas1/Klicky-Probe">Klicky Probe</a></li>
+                <li><a href="https://github.com/3DAixperts/skirt-button-pcb">Skirt Buttons</a></li>
+                <li><a href="https://github.com/nateb16/VoronUsers/tree/master/printer_mods/nateb16/THE_FILTER">THE FILTER</a></li>
+                <li><a href="https://github.com/VoronDesign/VoronUsers/tree/master/printer_mods/KevinAkaSam/VEFACH">VEFACH</a></li>
+                <li><a href="https://mods.vorondesign.com/detail/eiGz71BOprk2GapXbQVgA">Voron Decontaminator</a></li>
+                <li><a href="https://github.com/VoronDesign/VoronUsers/tree/master/printer_mods/jeoje/Sturdy_Handles">Sturdy Handles</a></li>
+                <li><a href="https://github.com/Annex-Engineering/Annex-Engineering_User_Mods/tree/main/Printers/All_Printers/annex_dev-Panel_2020_Clips_and_Hinges">Annex Panel Clips</a></li>
             </td></tr>
         <tr valign="top"><td>Custom Mods</td>
-            <td><li>[Customized 270&deg; Hinges](/mods/270DegreeHinges/)></li>
-                <li>[Logitech C270 Mount](/mods/LogitechC270Mount/)</li>
-                <li>[Top Spool Holder](/mods/TopSpoolHolder/)</li>
+            <td><li><a href="./mods/270DegreeHinges/">Customized 270&deg; Hinges</a></li>
+                <li><a href="./mods/LogitechC270Mount/">Logitech C270 Mount</a></li>
+                <li><a href="./mods/TopSpoolHolder/">Top Spool Holder</a></li>
             </td></tr>
     </tbody>
 </table>
