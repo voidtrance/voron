@@ -9,6 +9,14 @@ List of some hardware and software references for printer configuration.
 
 ![BTT Octopus Wiring](https://docs.vorondesign.com/build/electrical/images/v2_octopus_wiring.png)
 
+## BTT U2C
+-  Manual: https://github.com/bigtreetech/U2C/blob/master/BIGTREETECH%20U2C%20V1.0%26V1.1%20User%20Manual.pdf
+- Pinout: https://github.com/bigtreetech/U2C/blob/master/Image/pinout.png
+
+## BTT EBB36
+- Manual: https://github.com/bigtreetech/EBB/blob/master/EBB%20CAN%20V1.1%20(STM32G0B1)/EBB36%20CAN%20V1.1/BIGTREETECH%20EBB36%20CAN%20V1.1%20User%20Manual.pdf
+- Pinout: https://github.com/bigtreetech/EBB/blob/master/EBB%20CAN%20V1.0%20(STM32F072)/EBB36%20CAN%20V1.0/Hardware/EBB36%20CAN%20V1.0-PIN.png
+
 ## Voron Documentation
 - Website: https://docs.vorondesign.com/
 - GitHub: https://github.com/VoronDesign/Voron-Documentation
@@ -43,6 +51,12 @@ To reflash the Octopus (STM32F446XX) bootloader, use the following steps:
 `sudo dfu-util -d ,0483:df11 -R -a 0 -s 0x8000000:32768 -U old-bootloader.bin`
 6. Flash new bootloader:
 `sudo dfu-util -d ,0483:df11 -R -a 0 -s 0x8000000:leave -D bootloader.bin`
+
+### Flashing CAN device firmware
+For a guide to flashing formware and bootloaders for CAN devices, use the following
+guide:
+
+    https://github.com/Esoterical/voron_canbus
 
 ## Tuning Guides
 - https://ellis3dp.com/Print-Tuning-Guide/

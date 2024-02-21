@@ -780,17 +780,22 @@ def build_firmware(client, sftp, config_file):
     return 0
 
 
-def flash_firmware(client, sftp, config, device):
+def flash_firmware(client, sftp, config, type, device):
+    if type != "host" and not device:
+        return -2
+    
     # Transfer the config file
     printer = PrinterConfig(sftp, REMOTE_KLIPPER_PATH, REPO_TOP)
     printer.upload_file(config.name, config)
-    cmd = f"cd {REMOTE_KLIPPER_PATH} ; make flash KCONFIG_CONFIG={config.name}"
-    if device:
-        cmd += f" FLASH_DEVICE=/dev/serial/by-id/{device}"
+    cd = f"cd {REMOTE_KLIPPER_PATH} ; "
+    if type in ("mcu", "host"):
+        cmd += f"make flash KCONFIG_CONFIG={config.name}"
+        if type == "mcu":
+            cmd += f" FLASH_DEVICE=/dev/serial/by-id/{device}"
+    else:
+        cmd += "python3 ~/katapult/scripts/flashtool.py -i can0"
+        cmd += " -u {device} -f ./out/klipper.bin"
 
-    print("Before flashing firmware, stop Klipper by running")
-    print("'sudo systemctl stop klipper' on the printer.")
-    print()
     response = user_input("Confirm device firmware flash?", ["y", "n"],
                           default="n")
     if response == "n":
@@ -819,15 +824,17 @@ def firmware_update(client, sftp, config, opts, tempdir):
             continue
 
         config_file = pathlib.PosixPath(f"printer/klipper/config/{config_file}")
+        dev_type = config.get(section, "type", fallback="mcu")
         dev_id = config.get(section, "device", fallback=None)
 
         for op in modes:
             if op == "build":
-                print(f"Building firmware for device '{device}'...")
+                print(f"Building firmware for {dev_type.upper()} device '{device}'...")
                 status = build_firmware(client, sftp, config_file)
             else:
-                print(f"Flashing firmware for device '{device}'...")
-                status = flash_firmware(client, sftp, config_file, dev_id)
+                print(f"Flashing firmware for {dev_type.upper()} device '{device}'...")
+                status = flash_firmware(client, sftp, config_file, dev_type,
+                                        dev_id)
                 if status != 0:
                     return status
                     
