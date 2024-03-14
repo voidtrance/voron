@@ -206,16 +206,14 @@ class PrinterConfig:
 
 def compare_files(file1, file2):
     content1, content2 = [], []
-    if file1.exists() and os.access(file1, os.R_OK):
-        with (open(file1, 'r')) as fd:
-            content1 = fd.readlines()
-    else:
-        content1 = ""
-    if file2.exists() and os.access(file2, os.R_OK):
-        with open(file2, 'r') as fd:
-            content2 = fd.readlines()
-    else:
-        content2 = ""
+    try:
+        for f, c in [(file1, content1), (file2, content2)]:
+            if f.exists() and os.access(f, os.R_OK):
+                with (open(f, 'r')) as fd:
+                    c += fd.readlines()
+    except UnicodeDecodeError:
+        print(f"Failed to compare file {f}")
+        return None
     if content1 == content2:
         return None
     return difflib.unified_diff(content1, content2, str(file1), str(file2))
