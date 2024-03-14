@@ -15,7 +15,21 @@ List of some hardware and software references for printer configuration.
 
 ## BTT EBB36
 - Manual: https://github.com/bigtreetech/EBB/blob/master/EBB%20CAN%20V1.1%20(STM32G0B1)/EBB36%20CAN%20V1.1/BIGTREETECH%20EBB36%20CAN%20V1.1%20User%20Manual.pdf
-- Pinout: https://github.com/bigtreetech/EBB/blob/master/EBB%20CAN%20V1.0%20(STM32F072)/EBB36%20CAN%20V1.0/Hardware/EBB36%20CAN%20V1.0-PIN.png
+
+![EBB36 Pinout](/printer/docs/EBB36%20CAN%20V1.1&V1.2-PIN.png)
+
+### Toolhead HW Configuration
+| Usage / Hardware | Connector | Pin |
+|-|-|-|
+| Hotend heater (Rapido)| Hotend 0 | PB13 |
+| Hotend thermistor (Rapido) | TH0 | PA3 |
+| Hotend fan | FAN1 | PA0 |
+| Part cooling fans | FAN2 | PA1 |
+| X endstop | Endstop | PB6 |
+| Klicky Probe | Endstop | PB5 |
+| Filament Sensor | Probe | PB8 |
+| Filament Unload Button | Probe | PB9 |
+| LEDs | RFB | PD3 |
 
 ## Voron Documentation
 - Website: https://docs.vorondesign.com/
