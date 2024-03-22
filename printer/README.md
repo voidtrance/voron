@@ -18,28 +18,31 @@ List of some hardware and software references for printer configuration.
 
 ![EBB36 Pinout](/printer/docs/EBB36%20CAN%20V1.1&V1.2-PIN.png)
 
-### Toolhead HW Configuration
-| Usage / Hardware | Connector | Pin |
-|-|-|-|
-| Hotend heater (Rapido)| Hotend 0 | PB13 |
-| Hotend thermistor (Rapido) | TH0 | PA3 |
-| Hotend fan | FAN1 | PA0 |
-| Part cooling fans | FAN2 | PA1 |
-| X endstop | Endstop | PB6 |
-| Klicky Probe | Endstop | PB5 |
-| Filament Sensor | Probe | PB8 |
-| Filament Unload Button | Probe | PB9 |
-| LEDs | RFB | PD3 |
+### Toolhead Board HW Configuration
+| Usage / Hardware | Connector | Pin | Notes |
+|-|-|-|-|
+| Hotend heater (Rapido)| Hotend 0 | PB13 ||
+| Hotend thermistor (Rapido) | MAX31865 Port | PA4 | Two line PT1000 get wired to the middle two pins |
+| Hotend fan | FAN1 | PA0 | Fan is 5V so the input voltage will have to come from Endstop header |
+| Part cooling fans | FAN2 | PA1 ||
+| X endstop | Endstop | PB6 ||
+| Klicky Probe | Endstop | PB5 ||
+| Filament Sensor | Probe | PB8 ||
+| Filament Unload Button | Probe | PB9 ||
+| LEDs | RFB | PD3 ||
 
-## Voron Documentation
+## Documentation
+### Voron Documentation
 - Website: https://docs.vorondesign.com/
 - GitHub: https://github.com/VoronDesign/Voron-Documentation
 - V2.4 Assembly Guide: https://github.com/VoronDesign/Voron-2/raw/Voron2.4/Manual/Assembly_Manual_2.4r2.pdf
 
-## Klipper
+### Klipper Documentation
 - Junja2 Template Documentation: https://jinja.palletsprojects.com/en/2.10.x/templates/#
 - Klipper G-Code commands: https://www.klipper3d.org/G-Codes.html
 - Klipper Command Templates: https://www.klipper3d.org/Command_Templates.html
+
+## Board Firmware Guides
 
 ### Flashing MCU Firmware
 For the initial flashing of the Klipper firmware, follow the Voron Documentation. Once Klipper firmware has been
@@ -67,10 +70,7 @@ To reflash the Octopus (STM32F446XX) bootloader, use the following steps:
 `sudo dfu-util -d ,0483:df11 -R -a 0 -s 0x8000000:leave -D bootloader.bin`
 
 ### Flashing CAN device firmware
-For a guide to flashing formware and bootloaders for CAN devices, use the following
-guide:
-
-    https://github.com/Esoterical/voron_canbus
+* https://canbus.esoterical.online/
 
 ## Tuning Guides
 - https://ellis3dp.com/Print-Tuning-Guide/
