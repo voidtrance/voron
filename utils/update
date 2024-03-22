@@ -353,6 +353,7 @@ def verify_git_repo(path, branch):
     while repo_path.as_posix() != repo_path.root:
         if (repo_path / ".git").exists():
             break
+        repo_path = repo_path.parent
 
     if repo_path.as_posix() == repo_path.root:
         return False
@@ -663,7 +664,7 @@ def sync_config(conn, config, opts, tempdir):
                 continue
             print(f"Update from external source: {external}...")
             if update_from_external(config.get(external, "source"),
-                                    config.get(external, "branch", None),
+                                    config.get(external, "branch", fallback=None),
                                     config.get(external, "destination"),
                                     opts.path,
                                     config.getlist(external, "exclude")):
