@@ -22,14 +22,15 @@ List of some hardware and software references for printer configuration.
 | Usage / Hardware | Connector | Pin | Notes |
 |-|-|-|-|
 | Hotend heater (Rapido)| Hotend 0 | PB13 ||
-| Hotend thermistor (Rapido) | MAX31865 Port | PA4 | Two line PT1000 get wired to the middle two pins |
+| Hotend thermistor (Rapido) | MAX31865 | PA4 | Two line PT1000 get wired to the middle two pins |
 | Hotend fan | FAN1 | PA0 | Fan is 5V so the input voltage will have to come from Endstop header |
+| | Endstop | PB7 | Techometer |
 | Part cooling fans | FAN2 | PA1 ||
-| X endstop | Endstop | PB6 ||
-| Klicky Probe | Endstop | PB5 ||
-| Filament Sensor | Probe | PB8 ||
-| Filament Unload Button | Probe | PB9 ||
-| LEDs | RFB | PD3 ||
+| X endstop | Probe | PB8 | Endstop wired to GND and PB8 |
+| Klicky Probe | Probe | PB9 | Probe wired to GND and PB9 |
+| Filament Sensor | Endstop | PB6 ||
+| Filament Unload Button | Endstop | PB5 ||
+| LEDs | RGB | PD3 ||
 
 ## Documentation
 ### Voron Documentation
