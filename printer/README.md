@@ -9,16 +9,17 @@ List of some hardware and software references for printer configuration.
 
 ![BTT Octopus Wiring](https://docs.vorondesign.com/build/electrical/images/v2_octopus_wiring.png)
 
-## BTT U2C
+## CAN Bus Documentation
+### BTT U2C
 -  Manual: https://github.com/bigtreetech/U2C/blob/master/BIGTREETECH%20U2C%20V1.0%26V1.1%20User%20Manual.pdf
 - Pinout: https://github.com/bigtreetech/U2C/blob/master/Image/pinout.png
 
-## BTT EBB36
+### BTT EBB36
 - Manual: https://github.com/bigtreetech/EBB/blob/master/EBB%20CAN%20V1.1%20(STM32G0B1)/EBB36%20CAN%20V1.1/BIGTREETECH%20EBB36%20CAN%20V1.1%20User%20Manual.pdf
 
 ![EBB36 Pinout](/printer/docs/EBB36%20CAN%20V1.1&V1.2-PIN.png)
 
-### Toolhead Board HW Configuration
+#### Toolhead Board HW Configuration
 | Usage / Hardware | Connector | Pin | Notes |
 |-|-|-|-|
 | Hotend heater (Rapido)| Hotend 0 | PB13 ||
@@ -27,10 +28,18 @@ List of some hardware and software references for printer configuration.
 | | Endstop | PB7 | Techometer |
 | Part cooling fans | FAN2 | PA1 ||
 | X endstop | Probe | PB8 | Endstop wired to GND and PB8 |
-| Klicky Probe | Probe | PB9 | Probe wired to GND and PB9 |
+| Klicky Probe | Probe | PB9 | Probe wired to GND and PB9. Pin requires a pull-up. |
 | Filament Sensor | Endstop | PB6 ||
 | Filament Unload Button | Endstop | PB5 ||
 | LEDs | RGB | PD3 ||
+
+### CAN Wiring
+| BTT U2C | BTT EBB36 |
+|-|-|
+|![U2C](/printer/docs/btt-u2c-can-wiring.png) | ![EBB](/printer/docs/btt-ebb36-can-wiring.jpg) |
+
+### Guides
+* https://canbus.esoterical.online/
 
 ## Documentation
 ### Voron Documentation
@@ -70,8 +79,6 @@ To reflash the Octopus (STM32F446XX) bootloader, use the following steps:
 6. Flash new bootloader:
 `sudo dfu-util -d ,0483:df11 -R -a 0 -s 0x8000000:leave -D bootloader.bin`
 
-### Flashing CAN device firmware
-* https://canbus.esoterical.online/
 
 ## Tuning Guides
 - https://ellis3dp.com/Print-Tuning-Guide/
