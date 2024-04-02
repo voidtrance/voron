@@ -1,5 +1,7 @@
 {
-    "chamber_temperature": "40",
+    "chamber_temperature": [
+        "40"
+    ],
     "default_filament_colour": [
         "#0000FF"
     ],
@@ -32,22 +34,22 @@
     ],
     "from": "User",
     "hot_plate_temp": [
-        "100"
+        "105"
     ],
     "hot_plate_temp_initial_layer": [
-        "100"
+        "105"
     ],
     "inherits": "Voron Generic PLA",
     "is_custom_defined": "0",
     "name": "Sparta ABS+",
     "nozzle_temperature": [
-        "240"
+        "250"
     ],
     "nozzle_temperature_initial_layer": [
-        "240"
+        "250"
     ],
     "nozzle_temperature_range_high": [
-        "250"
+        "265"
     ],
     "nozzle_temperature_range_low": [
         "230"
