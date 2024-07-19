@@ -24,13 +24,12 @@ List of some hardware and software references for printer configuration.
 |-|-|-|-|
 | Hotend heater (Rapido)| Hotend 0 | PB13 ||
 | Hotend thermistor (Rapido) | MAX31865 | PA4 | Two line PT1000 get wired to the middle two pins |
-| Hotend fan | FAN1 | PA0 | Fan is 5V so the input voltage will have to come from Endstop header |
-| | Endstop | PB7 | Techometer |
+| Hotend fan | FAN1 | PA0 | |
 | Part cooling fans | FAN2 | PA1 ||
-| X endstop | Probe | PB8 | Endstop wired to GND and PB8 |
-| Klicky Probe | Probe | PB9 | Probe wired to GND and PB9. Pin requires a pull-up. |
-| Filament Sensor | Endstop | PB6 ||
-| Filament Unload Button | Endstop | PB5 ||
+| X endstop | Endstop | PB7 | |
+| ECRFv2 upper sensor | Endstop | PB5 | |
+| ECRFv2 lower sensor | Endstop | PB6 | |
+| TAP | Probe | PB9 | Tap sensor wired to GND, +5V, and PB9 |
 | LEDs | RGB | PD3 ||
 
 ### CAN Wiring
