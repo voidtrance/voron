@@ -26,8 +26,8 @@ List of some hardware and software references for printer configuration.
 | Hotend thermistor (Rapido) | MAX31865 | PA4 | Two line PT1000 get wired to the middle two pins |
 | Hotend fan | FAN1 | PA0 | |
 | Part cooling fans | FAN2 | PA1 ||
-| X endstop | Endstop | PB7 | |
-| ECRFv2 upper sensor | Endstop | PB5 | |
+| X endstop | Probe | PB8 | X endstop shares Probe port with TAP |
+| ECRFv2 upper sensor | Endstop | PB5 | Upper and lower sensor have to share GND from Endstop |
 | ECRFv2 lower sensor | Endstop | PB6 | |
 | TAP | Probe | PB9 | Tap sensor wired to GND, +5V, and PB9 |
 | LEDs | RGB | PD3 ||
