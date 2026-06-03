@@ -1,3 +1,9 @@
+> [!WARNING]
+> **This repository is no longer maintained/updated.**
+>
+> I have replaced my 3D printer with a non-Klipper printer. Therefore, I will no
+> longer be making updates to this repository.
+
 # voron
 Repository containing configuration, profiles, and tools related to my Voron 2.4
 3D Printer.
